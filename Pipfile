@@ -13,6 +13,7 @@ cryptography = "*"
 pillow = "*"
 reportlab = "*"
 pypdf2 = "==3.0.1"
+python-dotenv = "*"
 
 [dev-packages]
 
