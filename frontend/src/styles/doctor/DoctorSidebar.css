@@ -1,0 +1,412 @@
+/* Doctor Sidebar Styles */
+.doctor-sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  width: 280px;
+  background: #FFFFFF;
+  border-right: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: transform 0.3s ease;
+}
+
+/* Sidebar Header */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.brand-logo img {
+  width: 55px;
+  height: 55px;
+  object-fit: contain;
+}
+
+.brand-info h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0 0 2px 0;
+}
+
+.brand-info p {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Doctor Profile Section */
+.doctor-profile-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  margin: 16px;
+  background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.doctor-profile-section:hover {
+  background: linear-gradient(135deg, #DBEAFE 0%, #BFDBFE 100%);
+  transform: translateX(4px);
+}
+
+.doctor-avatar {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #3B82F6, #2563EB);
+  color: white;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.doctor-info h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1F2937;
+  margin: 0 0 2px 0;
+}
+
+.doctor-info p {
+  font-size: 12px;
+  color: #6B7280;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+
+.menu-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: #6B7280;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.menu-item:hover {
+  background: #F9FAFB;
+  color: #1F2937;
+  transform: translateX(4px);
+}
+
+.menu-item.active {
+  background: linear-gradient(135deg, #3B82F6, #2563EB);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.menu-item svg {
+  flex-shrink: 0;
+}
+
+/* Sidebar Bottom */
+.sidebar-bottom {
+  padding: 16px;
+  border-top: 1px solid #F3F4F6;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #FEF2F2;
+  border: 1px solid #FEE2E2;
+  border-radius: 10px;
+  color: #DC2626;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+}
+
+.logout-btn:hover {
+  background: #FEE2E2;
+  border-color: #FECACA;
+  transform: translateX(4px);
+}
+
+.logout-btn svg {
+  flex-shrink: 0;
+}
+
+
+/* Add this to your existing CSS */
+
+.doctor-id-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3B82F6;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 12px;
+  letter-spacing: 0.5px;
+}
+
+.doctor-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.doctor-profile-section {
+  padding: 20px;
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 12px;
+  margin: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.doctor-profile-section:hover {
+  background: rgba(59, 130, 246, 0.1);
+  transform: translateY(-2px);
+}
+
+.doctor-info h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+}
+
+.doctor-info p {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* Mobile Menu Button */
+.mobile-menu-btn {
+  display: none;
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 1100;
+  width: 48px;
+  height: 48px;
+  background: #3B82F6;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
+}
+
+.mobile-menu-btn:hover {
+  background: #2563EB;
+  transform: scale(1.05);
+}
+
+/* Sidebar Overlay */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* Scrollbar Styles */
+.sidebar-nav::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: #E5E7EB;
+  border-radius: 3px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: #D1D5DB;
+}
+
+/* Doctor Avatar with Image Support */
+.doctor-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 24px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ✅ ADD THESE */
+.doctor-avatar .avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+.doctor-avatar .avatar-initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 24px;
+  font-weight: 700;
+  color: white;
+  text-transform: uppercase;
+}
+
+/* Responsive Design */
+
+/* Tablets and Mobile */
+@media (max-width: 768px) {
+  .doctor-sidebar {
+    transform: translateX(-100%);
+  }
+
+  .doctor-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .mobile-menu-btn {
+    display: flex;
+  }
+
+  .sidebar-overlay {
+    display: block;
+  }
+
+  /* Adjust sidebar for mobile */
+  .sidebar-header {
+    padding: 20px;
+  }
+
+  .doctor-profile-section {
+    margin: 12px;
+    padding: 16px;
+  }
+
+  .sidebar-nav {
+    padding: 8px 12px;
+  }
+
+  .menu-item {
+    padding: 14px 16px;
+    font-size: 16px;
+  }
+
+  .sidebar-bottom {
+    padding: 12px;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+  .doctor-sidebar {
+    width: 260px;
+  }
+
+  .mobile-menu-btn {
+    width: 44px;
+    height: 44px;
+    top: 16px;
+    left: 16px;
+  }
+
+  .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .brand-info h2 {
+    font-size: 18px;
+  }
+
+  .doctor-avatar {
+    width: 44px;
+    height: 44px;
+  }
+
+  .doctor-info h3 {
+    font-size: 14px;
+  }
+}
+
+/* Focus visible for accessibility */
+.menu-item:focus-visible,
+.logout-btn:focus-visible,
+.mobile-menu-btn:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}

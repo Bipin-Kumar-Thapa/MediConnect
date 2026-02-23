@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reminder: Appointment Rescheduling Required</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f3f4f6;
+            line-height: 1.6;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 40px auto;
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .header-icon {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 40px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .header p {
+            margin: 10px 0 0;
+            font-size: 16px;
+            opacity: 0.95;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .urgent-box {
+            background: #fee2e2;
+            border: 3px solid #dc2626;
+            padding: 24px;
+            margin: 0 0 30px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .urgent-box .timer {
+            font-size: 48px;
+            font-weight: 700;
+            color: #dc2626;
+            margin-bottom: 12px;
+        }
+        .urgent-box strong {
+            display: block;
+            color: #991b1b;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .urgent-box p {
+            color: #7f1d1d;
+            margin: 0;
+            font-size: 15px;
+        }
+        .appointment-summary {
+            background: #fef3c7;
+            border: 2px solid #f59e0b;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 30px 0;
+        }
+        .appointment-summary h3 {
+            color: #78350f;
+            font-size: 16px;
+            font-weight: 700;
+            margin: 0 0 16px;
+        }
+        .summary-item {
+            color: #92400e;
+            font-size: 14px;
+            margin: 8px 0;
+        }
+        .summary-item strong {
+            color: #78350f;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #dc2626;
+            color: white !important;
+            text-decoration: none;
+            padding: 18px 50px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 17px;
+            text-align: center;
+            margin: 30px 0;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.3);
+        }
+        .cta-button:hover {
+            background: #b91c1c;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+        }
+        .consequences {
+            background: #fef2f2;
+            border-left: 4px solid #dc2626;
+            padding: 20px;
+            margin: 30px 0;
+            border-radius: 8px;
+        }
+        .consequences h4 {
+            color: #991b1b;
+            font-size: 16px;
+            font-weight: 700;
+            margin: 0 0 12px;
+        }
+        .consequences ul {
+            margin: 0;
+            padding-left: 20px;
+            color: #7f1d1d;
+        }
+        .consequences li {
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer p {
+            color: #6b7280;
+            font-size: 13px;
+            margin: 8px 0;
+        }
+        .footer .logo {
+            color: #3b82f6;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        @media only screen and (max-width: 600px) {
+            .email-container {
+                margin: 20px;
+                border-radius: 12px;
+            }
+            .header {
+                padding: 30px 20px;
+            }
+            .header h1 {
+                font-size: 24px;
+            }
+            .content {
+                padding: 30px 20px;
+            }
+            .urgent-box .timer {
+                font-size: 36px;
+            }
+            .cta-button {
+                display: block;
+                width: 100%;
+                padding: 16px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-icon">🚨</div>
+            <h1>Urgent Reminder</h1>
+            <p>Your appointment still needs attention</p>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <p style="color: #1f2937; font-size: 16px; margin: 0 0 20px;">
+                Dear <strong>{{ patient_name }}</strong>,
+            </p>
+
+            <!-- Urgent Timer Box -->
+            <div class="urgent-box">
+                <div class="timer">⏰ 12 Hours</div>
+                <strong>Time Remaining to Reschedule</strong>
+                <p>This is a reminder that you have not yet rescheduled your affected appointment.</p>
+            </div>
+
+            <p style="color: #1f2937; font-size: 15px; font-weight: 500;">
+                We previously notified you that your appointment with <strong>{{ doctor_name }}</strong> needs to be rescheduled. We have not yet received a response from you.
+            </p>
+
+            <!-- Appointment Summary -->
+            <div class="appointment-summary">
+                <h3>⚠️ Affected Appointment</h3>
+                <div class="summary-item"><strong>Doctor:</strong> {{ doctor_name }}</div>
+                <div class="summary-item"><strong>Original Date:</strong> {{ appointment_date }}</div>
+                <div class="summary-item"><strong>Original Time:</strong> {{ appointment_time }}</div>
+                <div class="summary-item"><strong>Appointment ID:</strong> #{{ appointment_id }}</div>
+            </div>
+
+            <!-- CTA Button -->
+            <center>
+                <a href="{{ reschedule_link }}" class="cta-button">
+                    Take Action Now
+                </a>
+            </center>
+
+            <!-- Consequences -->
+            <div class="consequences">
+                <h4>What happens if you don't reschedule?</h4>
+                <ul>
+                    <li><strong>In 12 hours:</strong> Your appointment will be automatically cancelled</li>
+                    <li>You will lose your spot and may need to wait longer for a new appointment</li>
+                    <li>You may miss important medical care or follow-up treatment</li>
+                </ul>
+            </div>
+
+            <p style="color: #1f2937; font-size: 15px; font-weight: 600; margin: 30px 0 10px;">
+                Don't wait! Reschedule now to secure your spot.
+            </p>
+
+            <p style="color: #6b7280; font-size: 14px; margin: 10px 0 0;">
+                If you have already rescheduled, please disregard this message. If you need help, contact our reception desk immediately.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="logo">MediConnect</div>
+            <p>This is an urgent automated reminder from MediConnect Hospital</p>
+            <p>© 2026 MediConnect. All rights reserved.</p>
+            <p style="margin-top: 20px; font-size: 12px;">
+                This is the second and final reminder before automatic cancellation.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

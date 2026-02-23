@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f6f9;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 30px auto;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .header {
+      background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .header h1 {
+      color: white;
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+    }
+    .header p {
+      color: #BFDBFE;
+      margin: 6px 0 0;
+      font-size: 14px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.2);
+      color: white;
+      padding: 4px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    .body {
+      padding: 36px 40px;
+    }
+    .greeting {
+      font-size: 18px;
+      color: #1F2937;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .subtext {
+      color: #6B7280;
+      font-size: 14px;
+      margin-bottom: 28px;
+    }
+    .alert-box {
+      background: #FEF3C7;
+      border-left: 4px solid #F59E0B;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+    }
+    .alert-box p {
+      margin: 0;
+      color: #92400E;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .info-card {
+      background: #F8FAFC;
+      border: 1px solid #E5E7EB;
+      border-radius: 10px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .info-card h3 {
+      margin: 0 0 16px;
+      font-size: 15px;
+      color: #374151;
+      font-weight: 600;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #E5E7EB;
+      font-size: 14px;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #6B7280;
+      font-weight: 500;
+    }
+    .info-value {
+      color: #111827;
+      font-weight: 600;
+      text-align: right;
+    }
+    .location-box {
+      background: #EFF6FF;
+      border: 1px solid #BFDBFE;
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 14px;
+      color: #1D4ED8;
+    }
+    .location-box strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .tips {
+      background: #F0FDF4;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+    .tips h4 {
+      color: #166534;
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+    .tips ul {
+      margin: 0;
+      padding-left: 18px;
+      color: #15803D;
+      font-size: 13px;
+    }
+    .tips li {
+      margin-bottom: 5px;
+    }
+    .footer {
+      background: #F9FAFB;
+      border-top: 1px solid #E5E7EB;
+      padding: 24px 40px;
+      text-align: center;
+    }
+    .footer p {
+      color: #9CA3AF;
+      font-size: 12px;
+      margin: 4px 0;
+    }
+    .footer strong {
+      color: #3B82F6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <h1>🏥 MediConnect</h1>
+      <p>Your trusted healthcare partner</p>
+      <span class="badge">⏰ Appointment Reminder</span>
+    </div>
+
+    <!-- Body -->
+    <div class="body">
+
+      <p class="greeting">Hello, {{ patient_name }}!</p>
+      <p class="subtext">This is a friendly reminder about your upcoming appointment.</p>
+
+      <!-- Alert -->
+      <div class="alert-box">
+        <p>⚠️ Your appointment is in 1 hour. Please be on time!</p>
+      </div>
+
+      <!-- Appointment Info -->
+      <div class="info-card">
+        <h3>📋 Appointment Details</h3>
+        <div class="info-row">
+          <span class="info-label">Patient Name: </span>
+          <span class="info-value">{{ patient_name }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Patient ID: </span>
+          <span class="info-value">{{ patient_id }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Doctor: </span>
+          <span class="info-value">{{ doctor_name }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Specialty: </span>
+          <span class="info-value">{{ specialty }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Date: </span>
+          <span class="info-value">{{ appointment_date }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Time: </span>
+          <span class="info-value">{{ appointment_time }}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Type: </span>
+          <span class="info-value">{{ appointment_type }}</span>
+        </div>
+      </div>
+
+      <!-- Location -->
+      <div class="location-box">
+        <strong>📍 Location: </strong>
+        {{ location }}
+      </div>
+
+      <!-- Tips -->
+      <div class="tips">
+        <h4>✅ Before You Arrive</h4>
+        <ul>
+          <li>Carry a Digital Appointment Confirmation</li>
+          <li>Bring any previous medical reports</li>
+          <li>Arrive 10 minutes early for registration</li>
+          <li>Bring your insurance card if applicable</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>This is an automated reminder from <strong>MediConnect</strong></p>
+      <p>Please do not reply to this email</p>
+      <p>© 2026 MediConnect. All rights reserved.</p>
+    </div>
+
+  </div>
+</body>
+</html>

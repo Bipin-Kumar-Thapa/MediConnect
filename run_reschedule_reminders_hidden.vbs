@@ -1,0 +1,1 @@
+CreateObject("Wscript.Shell").Run "cmd /c cd /d E:\MediConnect && C:\Users\Dell\.virtualenvs\MediConnect-likiOFFF\Scripts\python.exe manage.py send_reschedule_reminders", 0, False
