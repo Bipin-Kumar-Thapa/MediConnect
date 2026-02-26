@@ -1,11 +1,13 @@
-from django.db import models
+from django.db import models, transaction, IntegrityError
 from django.contrib.auth.models import User
 from django.utils import timezone
+import random
+import string
 
 
 class StaffProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='staffprofile')
-    staff_id = models.CharField(max_length=20, unique=True, blank=True, default='')
+    staff_id = models.CharField(max_length=20, unique=True, editable=False, null=True, blank=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True)
     profile_photo = models.ImageField(upload_to='staff_photos/', blank=True, null=True)
@@ -13,15 +15,37 @@ class StaffProfile(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def generate_random_code(self, length=6):
+        """Generate random alphanumeric code (uppercase letters + digits)"""
+        chars = ''.join([c for c in (string.ascii_uppercase + string.digits) 
+                        if c not in 'O0I1'])  # Remove confusing characters
+        return ''.join(random.choice(chars) for _ in range(length))
+
     def save(self, *args, **kwargs):
-        if not self.staff_id:
-            year = timezone.now().year
-            count = StaffProfile.objects.count() + 1
-            self.staff_id = f"STF-{year}-{count:03d}"
-        super().save(*args, **kwargs)
+        if self.staff_id:
+            return super().save(*args, **kwargs)
+
+        year = timezone.now().year
+        
+        for attempt in range(10):
+            try:
+                with transaction.atomic():
+                    random_code = self.generate_random_code(6)
+                    self.staff_id = f"STF-{year}-{random_code}"
+                    
+                    if StaffProfile.objects.filter(staff_id=self.staff_id).exists():
+                        continue
+                    
+                    super().save(*args, **kwargs)
+                    return
+
+            except IntegrityError:
+                continue
+
+        raise IntegrityError("Failed to generate unique staff_id after 10 attempts")
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - Staff"
+        return f"{self.staff_id} - {self.user.get_full_name()}"
 
 
 class LabReport(models.Model):

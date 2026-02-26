@@ -6,9 +6,12 @@ from django.views.decorators.csrf import csrf_protect
 from django.db.models import Q
 from django.utils import timezone
 from .models import PatientProfile
-from doctors.models import DoctorProfile, Appointment, Prescription
+from doctors.models import DoctorProfile, Appointment, Prescription, DoctorSchedule
 import json
-from datetime import timedelta
+from datetime import timedelta, datetime, time as dt_time
+from datetime import timedelta as dt_timedelta
+from staff.models import LabReport, LabReportParameter
+
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -17,7 +20,6 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import io
-
 
 
 def auto_mark_missed_appointments():
@@ -732,14 +734,13 @@ def get_prescriptions(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
 
-    from datetime import timedelta
     
     # Auto-expire old prescriptions
     auto_expire_prescriptions(profile)
 
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
-    time_period = request.GET.get('time_period', 'all')  # ✅ NEW
+    time_period = request.GET.get('time_period', 'last_month') 
     page = int(request.GET.get('page', 1))
     per_page = 10
 
@@ -747,7 +748,7 @@ def get_prescriptions(request):
         patient=profile
     ).select_related('doctor__user').prefetch_related('medicines')
 
-    # ✅ NEW: Time Period Filter
+    # Time Period Filter
     if time_period != 'all':
         today = timezone.now().date()
         
@@ -1079,12 +1080,9 @@ def get_lab_reports(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
-    from staff.models import LabReport, LabReportParameter
-    from datetime import datetime, timedelta
-    
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
-    time_period = request.GET.get('time_period', 'all')  # ✅ NEW
+    time_period = request.GET.get('time_period', 'last_month') 
     page = int(request.GET.get('page', 1))
     per_page = 10
     
@@ -1092,7 +1090,7 @@ def get_lab_reports(request):
         'uploaded_by__user', 'doctor__user'
     ).prefetch_related('parameters')
     
-    # ✅ NEW: Time Period Filter
+    # Time Period Filter
     if time_period != 'all':
         today = timezone.now().date()
         
@@ -2009,8 +2007,6 @@ def reschedule_appointment(request, appointment_id):
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
     try:
-        import json
-        from datetime import datetime, time as dt_time
         
         data = json.loads(request.body)
         new_date = data.get('appointment_date')
@@ -2062,6 +2058,7 @@ def reschedule_appointment(request, appointment_id):
         appointment.appointment_date = date_obj
         appointment.appointment_time = time_obj
         appointment.status = 'confirmed'
+        appointment.reminder_sent = False
         appointment.save()
         
         # ✅ FIX: Format time properly
@@ -2120,32 +2117,69 @@ def get_transfer_options(request, appointment_id):
         doctors_list = []
         
         for doctor in alternative_doctors:
-            # Check if doctor works on this date
-            from doctors.models import DoctorSchedule
-            from datetime import datetime
-            
             day_map = {
                 0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday',
                 4: 'friday', 5: 'saturday', 6: 'sunday'
             }
-            day_name = day_map[original_date.weekday()]
             
-            has_schedule = DoctorSchedule.objects.filter(
+            # ✅ NEW LOGIC: Check if doctor has ANY working days in next 7 days
+            today = timezone.now().date()
+            
+            # Check if doctor has any active schedules at all
+            has_any_schedule = DoctorSchedule.objects.filter(
                 doctor=doctor,
-                day_of_week=day_name,
                 is_active=True,
                 slot_type='consultation'
             ).exists()
             
-            if not has_schedule:
-                continue  # Skip doctors who don't work on this day
+            if not has_any_schedule:
+                continue  # Skip if doctor has no schedules at all
             
-            # Get available times for this doctor on original date
-            available_times = get_available_time_slots(doctor, original_date)
+            # Check if doctor has available slots in next 7 days
+            found_available_day = False
+            for days_ahead in range(1, 8):  # Check next 7 days
+                check_date = today + dt_timedelta(days=days_ahead)
+                day_name = day_map[check_date.weekday()]
+                
+                # Check if doctor works on this day
+                has_schedule_this_day = DoctorSchedule.objects.filter(
+                    doctor=doctor,
+                    day_of_week=day_name,
+                    is_active=True,
+                    slot_type='consultation'
+                ).exists()
+                
+                if has_schedule_this_day:
+                    # Check if there are available slots
+                    available_times = get_available_time_slots(doctor, check_date)
+                    if available_times:
+                        found_available_day = True
+                        break  # Found at least one available day
             
-            # Check if original time is available
-            original_time_str = original_time.strftime('%I:%M %p').lstrip('0')
-            same_time_available = original_time_str in available_times
+            if not found_available_day:
+                continue  # Skip if no available slots in next 7 days
+            
+            # ✅ Doctor has available days! Include them in the list.
+            
+            # Check if doctor works on the ORIGINAL date (for "same time available" badge)
+            original_day_name = day_map[original_date.weekday()]
+            has_schedule_original_day = DoctorSchedule.objects.filter(
+                doctor=doctor,
+                day_of_week=original_day_name,
+                is_active=True,
+                slot_type='consultation'
+            ).exists()
+            
+            same_time_available = False
+            
+            if has_schedule_original_day:
+                # Doctor works on original day, check if original time is available
+                available_times_original = get_available_time_slots(doctor, original_date)
+                original_time_str = original_time.strftime('%I:%M %p').lstrip('0')
+                same_time_available = original_time_str in available_times_original
+            
+            # Note: We don't show preview times here anymore since they'll be fetched
+            # when user clicks the doctor card (via get_transfer_doctor_slots endpoint)
             
             doctor_photo = None
             if hasattr(doctor, 'profile_photo') and doctor.profile_photo:
@@ -2159,7 +2193,7 @@ def get_transfer_options(request, appointment_id):
                 'room_location': doctor.room_location or 'Not specified',
                 'photo': doctor_photo,
                 'same_time_available': same_time_available,
-                'available_times': available_times[:10]  # Limit to 10 slots
+                'available_times': []  # Will be fetched when doctor is clicked
             })
         
         return JsonResponse({
@@ -2207,7 +2241,7 @@ def transfer_appointment(request, appointment_id):
         
         data = json.loads(request.body)
         new_doctor_id = data.get('doctor_id')
-        new_date = data.get('appointment_date')  # ← NEW: Accept date parameter
+        new_date = data.get('appointment_date')
         new_time = data.get('appointment_time')
         
         if not new_doctor_id:
@@ -2226,17 +2260,28 @@ def transfer_appointment(request, appointment_id):
         if new_doctor.specialization != appointment.doctor.specialization:
             return JsonResponse({"error": "Doctor must have the same specialty"}, status=400)
         
-        # Convert 12hr time to 24hr
-        from datetime import datetime
-        try:
-            new_time_obj = datetime.strptime(new_time, '%I:%M %p').time()
-        except:
-            new_time_obj = datetime.strptime(new_time, '%H:%M').time()
+        # Convert date string to date object
+        if isinstance(new_date, str):
+            new_date_obj = datetime.strptime(new_date, '%Y-%m-%d').date()
+        else:
+            new_date_obj = new_date
+        
+        # Convert time string to time object
+        if isinstance(new_time, str):
+            try:
+                new_time_obj = datetime.strptime(new_time, '%I:%M %p').time()
+            except:
+                try:
+                    new_time_obj = datetime.strptime(new_time, '%H:%M').time()
+                except:
+                    new_time_obj = datetime.strptime(new_time, '%H:%M:%S').time()
+        else:
+            new_time_obj = new_time
         
         # Check for conflicts
         conflict = Appointment.objects.filter(
             doctor=new_doctor,
-            appointment_date=new_date,  # ← UPDATED: Use new_date
+            appointment_date=new_date_obj,  # ✅ Use date object
             appointment_time=new_time_obj,
             status__in=['pending', 'confirmed']
         ).exists()
@@ -2247,12 +2292,11 @@ def transfer_appointment(request, appointment_id):
         # Update appointment
         old_doctor_name = f"Dr. {appointment.doctor.user.get_full_name()}"
         appointment.doctor = new_doctor
-        appointment.appointment_date = new_date  # ← NEW: Update date
+        appointment.appointment_date = new_date_obj  # ✅ Use date object
         appointment.appointment_time = new_time_obj
         appointment.status = 'confirmed'
+        appointment.reminder_sent = False
         appointment.save()
-        
-        # TODO: Send confirmation email
         
         new_doctor_name = f"Dr. {new_doctor.user.get_full_name()}"
         
@@ -2267,7 +2311,11 @@ def transfer_appointment(request, appointment_id):
     except Appointment.DoesNotExist:
         return JsonResponse({"error": "Appointment not found"}, status=404)
     except Exception as e:
+        import traceback
+        print(f"Error in transfer_appointment: {e}")
+        print(traceback.format_exc())
         return JsonResponse({"error": str(e)}, status=500)
+
 
 
 

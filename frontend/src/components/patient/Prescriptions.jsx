@@ -38,7 +38,7 @@ const Prescriptions = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [timePeriod, setTimePeriod] = useState('all');
+  const [timePeriod, setTimePeriod] = useState('last_month');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [downloadingId, setDownloadingId] = useState(null);

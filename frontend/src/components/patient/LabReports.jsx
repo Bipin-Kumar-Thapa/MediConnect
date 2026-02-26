@@ -42,7 +42,7 @@ const LabReports = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
-  const [timePeriod, setTimePeriod] = useState('all');
+  const [timePeriod, setTimePeriod] = useState('last_month');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 

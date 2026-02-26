@@ -4,6 +4,8 @@ from django.utils import timezone
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from datetime import timedelta
+import random
+import string
 
 
 class DoctorProfile(models.Model):
@@ -38,42 +40,62 @@ class DoctorProfile(models.Model):
     is_active = models.BooleanField(default=True)
     
     profile_photo = models.ImageField(upload_to='doctor_photos/', null=True, blank=True)
-    sub_specialty = models.CharField(max_length=100, blank=True)
-    room_location = models.CharField(max_length=200, blank=True)
-    department = models.CharField(max_length=100, blank=True)
-    education = models.TextField(blank=True)
-    certification = models.TextField(blank=True)
-    languages = models.CharField(max_length=200, blank=True)
-    available_hours = models.CharField(max_length=200, blank=True)
+    sub_specialty = models.CharField(max_length=100, blank=True, null=True)
+    room_location = models.CharField(max_length=200, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True)
+    education = models.TextField(blank=True, null=True)
+    certification = models.TextField(blank=True, null=True)
+    languages = models.CharField(max_length=200, blank=True, null=True)
+    available_hours = models.CharField(max_length=200, blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def generate_random_code(self, length=6):
+        """Generate random alphanumeric code (uppercase letters + digits)"""
+        chars = ''.join([c for c in (string.ascii_uppercase + string.digits) 
+                        if c not in 'O0I1'])  # Remove confusing characters
+        return ''.join(random.choice(chars) for _ in range(length))
+
     def save(self, *args, **kwargs):
+        # Convert empty strings to None for optional fields
+        if self.license_number == '':
+            self.license_number = None
+        if self.phone_number == '':
+            self.phone_number = None
+        if self.hospital_name == '':
+            self.hospital_name = None
+        if self.qualification == '':
+            self.qualification = None
+        if self.sub_specialty == '':
+            self.sub_specialty = None
+        if self.room_location == '':
+            self.room_location = None
+        if self.department == '':
+            self.department = None
+        
+        # Generate random doctor_id if not exists
         if self.doctor_id:
             return super().save(*args, **kwargs)
         
         year = timezone.now().year
-        for _ in range(5):
+        
+        for attempt in range(10):
             try:
                 with transaction.atomic():
-                    last = DoctorProfile.objects.filter(
-                        doctor_id__startswith=f"DOC-{year}-"
-                    ).order_by("-doctor_id").first()
+                    random_code = self.generate_random_code(6)
+                    self.doctor_id = f"DOC-{year}-{random_code}"
                     
-                    if last:
-                        last_number = int(last.doctor_id.split("-")[-1])
-                        next_number = last_number + 1
-                    else:
-                        next_number = 1
+                    if DoctorProfile.objects.filter(doctor_id=self.doctor_id).exists():
+                        continue
                     
-                    self.doctor_id = f"DOC-{year}-{next_number:03d}"
                     super().save(*args, **kwargs)
                     return
+
             except IntegrityError:
                 continue
         
-        raise IntegrityError("Failed to generate unique doctor_id")
+        raise IntegrityError("Failed to generate unique doctor_id after 10 attempts")
 
     def __str__(self):
         return f"{self.doctor_id} - Dr. {self.user.get_full_name() or self.user.username}"
