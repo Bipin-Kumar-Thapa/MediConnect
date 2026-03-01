@@ -1,6 +1,5 @@
 /* ============================================
    STAFF UPLOAD - Scoped with sup- prefix
-   Won't affect any other pages
    ============================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -183,6 +182,7 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
+  position: relative;
 }
 
 .sup-field--flex1 {
@@ -253,6 +253,112 @@
 
 .sup-input-icon-wrap input {
   padding-left: 38px;
+}
+
+/* ===== PATIENT SEARCH ===== */
+/* ===== PATIENT SEARCH ===== */
+.sup-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sup-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #6366f1;
+  font-size: 20px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.sup-search-input {
+  padding-left: 42px !important;
+  padding-right: 40px !important;
+}
+
+.sup-search-spinner {
+  position: absolute;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  z-index: 2;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Simple dropdown - positioned relative to input */
+.sup-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 1000;
+}
+
+.sup-search-item {
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: all 0.2s;
+}
+
+.sup-search-item:last-child {
+  border-bottom: none;
+}
+
+.sup-search-item:hover {
+  background: #f0f1ff;
+}
+
+.sup-search-item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.sup-search-item-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.sup-search-item-id {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6366f1;
+  background: #ede9fe;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.sup-search-item-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.sup-search-empty {
+  padding: 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.sup-card--patient {
+  overflow: visible !important;
 }
 
 /* ===== DOCTOR BOX ===== */
@@ -736,6 +842,80 @@
   display: block;
 }
 
+/* ===== TEST SECTION STYLES ===== */
+.sup-remove-section-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #FEE2E2;
+  border: 1.5px solid #FECACA;
+  border-radius: 10px;
+  color: #DC2626;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.2s;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.sup-remove-section-btn svg {
+  font-size: 18px;
+}
+
+.sup-remove-section-btn:hover {
+  background: #DC2626;
+  color: white;
+  border-color: #DC2626;
+}
+
+.sup-add-test-section-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  border-radius: 12px;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.25s;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+
+.sup-add-test-section-btn svg {
+  font-size: 20px;
+}
+
+.sup-add-test-section-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(99, 102, 241, 0.45);
+}
+
+.sup-params-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #F1F5F9;
+}
+
+.sup-params-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sup-params-header h3 {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
   .sup-grid-3 {
@@ -770,7 +950,6 @@
     padding: 12px;
   }
 
-  /* Parameters - stack on mobile */
   .sup-params-head {
     display: none;
   }
@@ -781,7 +960,6 @@
     padding: 12px;
   }
 
-  /* Make file delete last col full span */
   .sup-param-row .sup-del-btn {
     grid-column: span 2;
     width: 100%;

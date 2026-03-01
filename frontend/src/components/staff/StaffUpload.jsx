@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MdPerson,
@@ -15,6 +15,8 @@ import {
   MdImage,
   MdAttachFile,
   MdClose,
+  MdRemoveCircle,
+  MdSearch,
 } from 'react-icons/md';
 import { FaUserMd, FaFlask, FaNotesMedical } from 'react-icons/fa';
 import '../../styles/staff/StaffUpload.css';
@@ -25,71 +27,118 @@ const getCSRF = () =>
 const StaffUpload = () => {
   const navigate = useNavigate();
 
-  // ── Data from backend ──
-  const [patients, setPatients]         = useState([]);
-  const [doctors, setDoctors]           = useState([]);
-  const [loadingPatients, setLoadingPatients] = useState(true);
-  const [loadingDoctors, setLoadingDoctors]   = useState(false);
-  const [submitting, setSubmitting]     = useState(false);
+  // Patient search states
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [searchingPatients, setSearchingPatients] = useState(false);
+  const patientSearchRef = useRef(null);
 
-  // ── Form state ──
-  const [selectedPatient, setSelectedPatient]   = useState('');
+  const [doctors, setDoctors] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [selectedPatient, setSelectedPatient] = useState('');
   const [selectedPatientObj, setSelectedPatientObj] = useState(null);
-  const [selectedDoctor, setSelectedDoctor]     = useState('');
+  const [selectedDoctor, setSelectedDoctor] = useState('');
   const [consultingDoctor, setConsultingDoctor] = useState(null);
-  const [testName, setTestName]                 = useState('');
-  const [testDate, setTestDate]                 = useState('');
-  const [category, setCategory]                 = useState('');
-  const [overallResult, setOverallResult]       = useState('Normal');
-  const [reportStatus, setReportStatus]         = useState('Pending');
-  const [notes, setNotes]                       = useState('');
-  const [reportFile, setReportFile]             = useState(null);
-  const [reportImage, setReportImage]           = useState(null);
-  const [showSuccess, setShowSuccess]           = useState(false);
-  const [successMsg, setSuccessMsg]             = useState('');
-  const [errorMsg, setErrorMsg]                 = useState('');
+  const [testDate, setTestDate] = useState('');
+  const [reportStatus, setReportStatus] = useState('Pending');
+  const [notes, setNotes] = useState('');
+  const [reportFiles, setReportFiles] = useState([]);
+  const [reportImages, setReportImages] = useState([]);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const [parameters, setParameters] = useState([
-    { id: 1, name: '', value: '', unit: '', normalRange: '', status: 'Normal' }
+  const [testSections, setTestSections] = useState([
+    {
+      id: 1,
+      test_name_choice: '',
+      custom_test_name: '',
+      category: '',
+      status: 'Normal',
+      findings: '',
+      parameters: [
+        { id: 1, name: '', value: '', unit: '', normalRange: '', status: 'Normal' }
+      ]
+    }
   ]);
 
   const categories = [
     'Hematology', 'Biochemistry', 'Endocrinology',
-    'Microbiology', 'Radiology', 'Immunology', 'Pathology'
+    'Microbiology', 'Radiology', 'Other'
   ];
 
-  // ── Fetch patients on mount ──
+  const testNames = [
+    'CBC', 'LFT', 'KFT', 'Lipid Profile', 'Thyroid Panel',
+    'HbA1c', 'Urinalysis', 'ESR', 'CRP', 'Vitamin D',
+    'Vitamin B12', 'Iron Studies', 'Electrolytes',
+    'Blood Gas', 'Coagulation', 'Other'
+  ];
+
+  // Close dropdown when clicking outside
   useEffect(() => {
-    fetch('http://localhost:8000/staff/patients/', { credentials: 'include' })
-      .then(r => r.json())
-      .then(data => {
-        setPatients(data.patients || []);
-        setLoadingPatients(false);
-      })
-      .catch(() => setLoadingPatients(false));
+    const handleClickOutside = (event) => {
+      if (patientSearchRef.current && !patientSearchRef.current.contains(event.target)) {
+        setShowPatientDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ── When patient changes → fetch their doctors ──
-  const handlePatientChange = (e) => {
-    const id = e.target.value;
-    setSelectedPatient(id);
+  // Search patients with debounce
+  useEffect(() => {
+    // Don't search if less than 2 characters
+    if (patientSearchQuery.length < 2) {
+      setPatientSearchResults([]);
+      setSearchingPatients(false);
+      setShowPatientDropdown(false);
+      return;
+    }
+
+    setSearchingPatients(true);
+    const timeoutId = setTimeout(() => {
+      fetch(`http://localhost:8000/staff/patients/search/?q=${encodeURIComponent(patientSearchQuery)}`, {
+        credentials: 'include'
+      })
+        .then(r => r.json())
+        .then(data => {
+          setPatientSearchResults(data.patients || []);
+          setSearchingPatients(false);
+          if (patientSearchQuery.length >= 2) {
+            setShowPatientDropdown(true);
+          }
+        })
+        .catch(() => {
+          setSearchingPatients(false);
+          setShowPatientDropdown(false);
+        });
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [patientSearchQuery]);
+
+  const handlePatientSelect = (patient) => {
+    setSelectedPatient(String(patient.id));
+    setSelectedPatientObj(patient);
+    setPatientSearchQuery(`${patient.name} • ${patient.patient_id}`);
+    setShowPatientDropdown(false);
+    setPatientSearchResults([]);
     setSelectedDoctor('');
     setConsultingDoctor(null);
     setDoctors([]);
 
-    const pat = patients.find(p => String(p.id) === id);
-    setSelectedPatientObj(pat || null);
-
-    if (!id) return;
-
+    // Load doctors for this patient
     setLoadingDoctors(true);
-    fetch(`http://localhost:8000/staff/patients/${id}/doctors/`, { credentials: 'include' })
+    fetch(`http://localhost:8000/staff/patients/${patient.id}/doctors/`, { credentials: 'include' })
       .then(r => r.json())
       .then(data => {
         const docs = data.doctors || [];
         setDoctors(docs);
         setLoadingDoctors(false);
-        // Auto-select if only one doctor
         if (docs.length === 1) {
           setSelectedDoctor(String(docs[0].id));
           setConsultingDoctor(docs[0]);
@@ -105,19 +154,74 @@ const StaffUpload = () => {
     setConsultingDoctor(doc || null);
   };
 
-  // ── Parameters ──
-  const addParameter = () => {
-    setParameters([...parameters, {
-      id: Date.now(), name: '', value: '', unit: '', normalRange: '', status: 'Normal'
+  const addTestSection = () => {
+    setTestSections([...testSections, {
+      id: Date.now(),
+      test_name_choice: '',
+      custom_test_name: '',
+      category: '',
+      status: 'Normal',
+      findings: '',
+      parameters: [
+        { id: Date.now(), name: '', value: '', unit: '', normalRange: '', status: 'Normal' }
+      ]
     }]);
   };
 
-  const removeParameter = (id) => {
-    if (parameters.length > 1) setParameters(parameters.filter(p => p.id !== id));
+  const removeTestSection = (sectionId) => {
+    if (testSections.length > 1) {
+      setTestSections(testSections.filter(s => s.id !== sectionId));
+    }
   };
 
-  const updateParameter = (id, field, value) => {
-    setParameters(parameters.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updateTestSection = (sectionId, field, value) => {
+    setTestSections(testSections.map(section =>
+      section.id === sectionId ? { ...section, [field]: value } : section
+    ));
+  };
+
+  const addParameter = (sectionId) => {
+    setTestSections(testSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: [...section.parameters, {
+              id: Date.now(),
+              name: '',
+              value: '',
+              unit: '',
+              normalRange: '',
+              status: 'Normal'
+            }]
+          }
+        : section
+    ));
+  };
+
+  const removeParameter = (sectionId, paramId) => {
+    setTestSections(testSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: section.parameters.length > 1
+              ? section.parameters.filter(p => p.id !== paramId)
+              : section.parameters
+          }
+        : section
+    ));
+  };
+
+  const updateParameter = (sectionId, paramId, field, value) => {
+    setTestSections(testSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: section.parameters.map(param =>
+              param.id === paramId ? { ...param, [field]: value } : param
+            )
+          }
+        : section
+    ));
   };
 
   const getStatusClass = (status) => {
@@ -138,22 +242,30 @@ const StaffUpload = () => {
   const handleReset = () => {
     setSelectedPatient('');
     setSelectedPatientObj(null);
+    setPatientSearchQuery('');
+    setPatientSearchResults([]);
     setSelectedDoctor('');
     setConsultingDoctor(null);
     setDoctors([]);
-    setTestName('');
     setTestDate('');
-    setCategory('');
-    setOverallResult('Normal');
     setReportStatus('Pending');
     setNotes('');
-    setReportFile(null);
-    setReportImage(null);
+    setReportFiles([]);
+    setReportImages([]);
     setErrorMsg('');
-    setParameters([{ id: 1, name: '', value: '', unit: '', normalRange: '', status: 'Normal' }]);
+    setTestSections([{
+      id: 1,
+      test_name_choice: '',
+      custom_test_name: '',
+      category: '',
+      status: 'Normal',
+      findings: '',
+      parameters: [
+        { id: 1, name: '', value: '', unit: '', normalRange: '', status: 'Normal' }
+      ]
+    }]);
   };
 
-  // ── Submit ──
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
@@ -161,17 +273,14 @@ const StaffUpload = () => {
 
     try {
       const formData = new FormData();
-      formData.append('patient_id',     selectedPatient);
-      formData.append('doctor_id',      selectedDoctor);
-      formData.append('test_name',      testName);
-      formData.append('test_date',      testDate);
-      formData.append('category',       category.toLowerCase());
-      formData.append('overall_status', overallResult.toLowerCase());
-      formData.append('is_completed',   reportStatus === 'Completed' ? 'true' : 'false');
-      formData.append('notes',          notes);
-      formData.append('parameters',     JSON.stringify(parameters));
-      if (reportFile)  formData.append('report_file',  reportFile);
-      if (reportImage) formData.append('report_image', reportImage);
+      formData.append('patient_id', selectedPatient);
+      formData.append('doctor_id', selectedDoctor);
+      formData.append('test_date', testDate);
+      formData.append('is_completed', reportStatus === 'Completed' ? 'true' : 'false');
+      formData.append('notes', notes);
+      formData.append('test_sections', JSON.stringify(testSections));
+      reportFiles.forEach(file => formData.append('report_files', file));
+      reportImages.forEach(image => formData.append('report_images', image));
 
       const response = await fetch('http://localhost:8000/staff/lab-reports/upload/', {
         method: 'POST',
@@ -202,7 +311,6 @@ const StaffUpload = () => {
   return (
     <div className="sup-page">
 
-      {/* Success Toast */}
       {showSuccess && (
         <div className="sup-toast">
           <div className="sup-toast-icon"><MdCheckCircle /></div>
@@ -216,15 +324,13 @@ const StaffUpload = () => {
         </div>
       )}
 
-      {/* Page Header */}
       <div className="sup-header">
         <div className="sup-header-left">
           <h1>Upload Lab Report</h1>
-          <p>Fill in all patient test results, parameters and upload files</p>
+          <p>Search patient, add multiple tests, parameters and upload files</p>
         </div>
       </div>
 
-      {/* Error Banner */}
       {errorMsg && (
         <div className="sup-error-banner">
           <MdClose /> {errorMsg}
@@ -233,155 +339,122 @@ const StaffUpload = () => {
 
       <form className="sup-form" onSubmit={handleSubmit}>
 
-        {/* ── 1. PATIENT & DOCTOR ── */}
-        <div className="sup-card">
+        {/* PATIENT & DOCTOR */}
+        <div className="sup-card sup-card--patient">
           <div className="sup-card-head">
             <div className="sup-card-head-icon sup-icon--blue"><MdPerson /></div>
             <h2>Patient & Doctor Information</h2>
           </div>
           <div className="sup-card-body">
             <div className="sup-grid-2">
-
-              {/* Patient dropdown */}
-              <div className="sup-field">
-                <label>Select Patient <span className="sup-required">*</span></label>
-                <select
-                  value={selectedPatient}
-                  onChange={handlePatientChange}
-                  required
-                  disabled={loadingPatients}
-                >
-                  <option value="">
-                    {loadingPatients ? 'Loading patients...' : 'Choose a patient...'}
-                  </option>
-                  {patients.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} • {p.patient_id} • {p.age}y {p.gender}
-                    </option>
-                  ))}
-                </select>
+              
+              {/* FIXED: Searchable Patient Field */}
+              <div className="sup-field" style={{ position: 'relative', zIndex: 100 }}>
+                <label>Search Patient <span className="sup-required">*</span></label>
+                <div className="sup-search-wrap" ref={patientSearchRef}>
+                  <MdSearch className="sup-search-icon" />
+                  <input
+                    type="text"
+                    className="sup-search-input"
+                    value={patientSearchQuery}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setPatientSearchQuery(value);
+                      if (value.length >= 2) {
+                        setShowPatientDropdown(true);
+                      } else {
+                        setShowPatientDropdown(false);
+                      }
+                    }}
+                    onFocus={() => {
+                      if (patientSearchQuery.length >= 2 && patientSearchResults.length > 0) {
+                        setShowPatientDropdown(true);
+                      }
+                    }}
+                    placeholder="Type patient name or ID..."
+                    required
+                  />
+                  {searchingPatients && <div className="sup-search-spinner" />}
+                  
+                  {/* Dropdown directly below input */}
+                  {showPatientDropdown && patientSearchQuery.length >= 2 && (
+                    <div className="sup-search-dropdown">
+                      {patientSearchResults.length > 0 ? (
+                        patientSearchResults.map(patient => (
+                          <div
+                            key={patient.id}
+                            className="sup-search-item"
+                            onClick={() => handlePatientSelect(patient)}
+                          >
+                            <div className="sup-search-item-main">
+                              <span className="sup-search-item-name">{patient.name}</span>
+                              <span className="sup-search-item-id">{patient.patient_id}</span>
+                            </div>
+                            <div className="sup-search-item-meta">
+                              {patient.age}y • {patient.gender}
+                            </div>
+                          </div>
+                        ))
+                      ) : !searchingPatients ? (
+                        <div className="sup-search-empty">No patients found</div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Doctor dropdown — only shown after patient selected */}
               <div className="sup-field">
                 <label>Select Doctor <span className="sup-required">*</span></label>
-                <select
-                  value={selectedDoctor}
-                  onChange={handleDoctorChange}
-                  required
-                  disabled={!selectedPatient || loadingDoctors}
-                >
+                <select value={selectedDoctor} onChange={handleDoctorChange} required disabled={!selectedPatient || loadingDoctors}>
                   <option value="">
-                    {!selectedPatient
-                      ? 'Select a patient first...'
-                      : loadingDoctors
-                        ? 'Loading doctors...'
-                        : doctors.length === 0
-                          ? 'No doctors found for this patient'
-                          : 'Choose a doctor...'}
+                    {!selectedPatient ? 'Select patient first...' : loadingDoctors ? 'Loading...' : doctors.length === 0 ? 'No doctors found' : 'Choose a doctor...'}
                   </option>
                   {doctors.map(d => (
                     <option key={d.id} value={d.id}>
-                      {d.name} — {d.specialty}
-                      {d.last_visit ? ` (Last visit: ${d.last_visit})` : ''}
+                      {d.name} — {d.specialty} {d.last_visit ? `(${d.last_visit})` : ''}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
 
-            {/* Doctor info card — shows after doctor selected */}
             {consultingDoctor && (
               <div className="sup-doctor-box">
                 {consultingDoctor.photo_url ? (
-                  <img
-                    src={consultingDoctor.photo_url}
-                    alt={consultingDoctor.name}
-                    className="sup-doctor-photo"
-                  />
+                  <img src={consultingDoctor.photo_url} alt={consultingDoctor.name} className="sup-doctor-photo" />
                 ) : (
                   <div className="sup-doctor-av"><FaUserMd /></div>
                 )}
                 <div className="sup-doctor-info">
                   <h4>{consultingDoctor.name}</h4>
-                  <p>{consultingDoctor.specialty}
-                    {consultingDoctor.department ? ` • ${consultingDoctor.department}` : ''}
-                  </p>
-                  {consultingDoctor.last_visit && (
-                    <small>Last visit with patient: {consultingDoctor.last_visit}</small>
-                  )}
+                  <p>{consultingDoctor.specialty}{consultingDoctor.department ? ` • ${consultingDoctor.department}` : ''}</p>
+                  {consultingDoctor.last_visit && <small>Last visit: {consultingDoctor.last_visit}</small>}
                 </div>
                 <div className="sup-doctor-note">
                   <MdInfo />
-                  <span>Report will be sent to both doctor and patient</span>
+                  <span>Report sent to doctor and patient</span>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {/* ── 2. TEST INFORMATION ── */}
+        {/* TEST DATE & STATUS */}
         <div className="sup-card">
           <div className="sup-card-head">
             <div className="sup-card-head-icon sup-icon--purple"><FaFlask /></div>
-            <h2>Test Information</h2>
+            <h2>Report Information</h2>
           </div>
           <div className="sup-card-body">
-            <div className="sup-grid-3">
-              <div className="sup-field">
-                <label>Test Name <span className="sup-required">*</span></label>
-                <input
-                  type="text"
-                  value={testName}
-                  onChange={e => setTestName(e.target.value)}
-                  placeholder="e.g., Complete Blood Count"
-                  required
-                />
-              </div>
+            <div className="sup-grid-2">
               <div className="sup-field">
                 <label>Test Date <span className="sup-required">*</span></label>
                 <div className="sup-input-icon-wrap">
                   <MdCalendarToday className="sup-input-icon" />
-                  <input
-                    type="date"
-                    value={testDate}
-                    onChange={e => setTestDate(e.target.value)}
-                    required
-                  />
+                  <input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} required />
                 </div>
               </div>
               <div className="sup-field">
-                <label>Category <span className="sup-required">*</span></label>
-                <select value={category} onChange={e => setCategory(e.target.value)} required>
-                  <option value="">Select category...</option>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── 3. REPORT STATUS ── */}
-        <div className="sup-card">
-          <div className="sup-card-head">
-            <div className="sup-card-head-icon sup-icon--orange"><MdScience /></div>
-            <h2>Report Status</h2>
-          </div>
-          <div className="sup-card-body">
-            <div className="sup-status-row">
-              <div className="sup-field sup-field--flex1">
-                <label>Overall Result <span className="sup-required">*</span></label>
-                <select
-                  value={overallResult}
-                  onChange={e => setOverallResult(e.target.value)}
-                  className={`sup-result-select sup-result-select--${overallResult.toLowerCase()}`}
-                >
-                  <option value="Normal">✅  Normal</option>
-                  <option value="Abnormal">⚠️  Abnormal</option>
-                  <option value="Critical">🚨  Critical</option>
-                </select>
-              </div>
-              <div className="sup-field sup-field--flex1">
                 <label>Report Completion</label>
                 <div className="sup-complete-wrap">
                   <button
@@ -389,14 +462,10 @@ const StaffUpload = () => {
                     className={`sup-complete-btn ${reportStatus === 'Completed' ? 'sup-complete-btn--done' : 'sup-complete-btn--pending'}`}
                     onClick={() => setReportStatus(reportStatus === 'Completed' ? 'Pending' : 'Completed')}
                   >
-                    {reportStatus === 'Completed'
-                      ? <><MdCheckCircle /> Mark as Completed</>
-                      : <><MdPending /> Mark as Pending</>}
+                    {reportStatus === 'Completed' ? <><MdCheckCircle /> Mark as Completed</> : <><MdPending /> Mark as Pending</>}
                   </button>
                   <span className={`sup-status-badge ${reportStatus === 'Completed' ? 'sup-status-badge--completed' : 'sup-status-badge--pending'}`}>
-                    {reportStatus === 'Completed'
-                      ? <><MdCheckCircle /> Completed</>
-                      : <><MdPending /> Pending</>}
+                    {reportStatus === 'Completed' ? <><MdCheckCircle /> Completed</> : <><MdPending /> Pending</>}
                   </span>
                 </div>
               </div>
@@ -404,120 +473,260 @@ const StaffUpload = () => {
           </div>
         </div>
 
-        {/* ── 4. TEST PARAMETERS ── */}
-        <div className="sup-card">
-          <div className="sup-card-head">
-            <div className="sup-card-head-icon sup-icon--green"><FaNotesMedical /></div>
-            <h2>Test Parameters</h2>
-            <button type="button" className="sup-add-param-btn" onClick={addParameter}>
-              <MdAdd /> Add Parameter
-            </button>
-          </div>
-          <div className="sup-card-body sup-card-body--no-pad">
-            <div className="sup-params-head">
-              <span>Parameter Name</span>
-              <span>Value</span>
-              <span>Unit</span>
-              <span>Normal Range</span>
-              <span>Status</span>
-              <span></span>
-            </div>
-            {parameters.map((param) => (
-              <div key={param.id} className="sup-param-row">
-                <input type="text" value={param.name}
-                  onChange={e => updateParameter(param.id, 'name', e.target.value)}
-                  placeholder="e.g., Hemoglobin" />
-                <input type="text" value={param.value}
-                  onChange={e => updateParameter(param.id, 'value', e.target.value)}
-                  placeholder="14.5" />
-                <input type="text" value={param.unit}
-                  onChange={e => updateParameter(param.id, 'unit', e.target.value)}
-                  placeholder="g/dL" />
-                <input type="text" value={param.normalRange}
-                  onChange={e => updateParameter(param.id, 'normalRange', e.target.value)}
-                  placeholder="12–16" />
-                <select
-                  value={param.status}
-                  onChange={e => updateParameter(param.id, 'status', e.target.value)}
-                  className={`sup-param-status-sel ${getStatusClass(param.status)}`}
-                >
-                  <option value="Normal">Normal</option>
-                  <option value="High">High</option>
-                  <option value="Low">Low</option>
-                  <option value="Critical">Critical</option>
-                </select>
-                <button type="button" className="sup-del-btn"
-                  onClick={() => removeParameter(param.id)}
-                  disabled={parameters.length === 1}>
-                  <MdDelete />
+        {/* TEST SECTIONS */}
+        {testSections.map((section, sectionIndex) => (
+          <div key={section.id} className="sup-card">
+            <div className="sup-card-head">
+              <div className="sup-card-head-icon sup-icon--green"><FaNotesMedical /></div>
+              <h2>Test Section {sectionIndex + 1}</h2>
+              {testSections.length > 1 && (
+                <button type="button" className="sup-remove-section-btn" onClick={() => removeTestSection(section.id)}>
+                  <MdRemoveCircle /> Remove
                 </button>
+              )}
+            </div>
+            <div className="sup-card-body">
+              <div className="sup-grid-3">
+                <div className="sup-field">
+                  <label>Test Name <span className="sup-required">*</span></label>
+                  <select
+                    value={section.test_name_choice}
+                    onChange={e => updateTestSection(section.id, 'test_name_choice', e.target.value)}
+                    required
+                  >
+                    <option value="">Select test...</option>
+                    {testNames.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+
+                {section.test_name_choice === 'Other' && (
+                  <div className="sup-field">
+                    <label>Custom Test Name <span className="sup-required">*</span></label>
+                    <input
+                      type="text"
+                      value={section.custom_test_name}
+                      onChange={e => updateTestSection(section.id, 'custom_test_name', e.target.value)}
+                      placeholder="Enter custom test name"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="sup-field">
+                  <label>Category <span className="sup-required">*</span></label>
+                  <select
+                    value={section.category}
+                    onChange={e => updateTestSection(section.id, 'category', e.target.value)}
+                    required
+                  >
+                    <option value="">Select category...</option>
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div className="sup-field">
+                  <label>Test Result <span className="sup-required">*</span></label>
+                  <select
+                    value={section.status}
+                    onChange={e => updateTestSection(section.id, 'status', e.target.value)}
+                    className={`sup-result-select sup-result-select--${section.status.toLowerCase()}`}
+                  >
+                    <option value="Normal">✅  Normal</option>
+                    <option value="Abnormal">⚠️  Abnormal</option>
+                    <option value="Critical">🚨  Critical</option>
+                  </select>
+                </div>
               </div>
-            ))}
+
+              <div className="sup-params-section">
+                <div className="sup-params-header">
+                  <h3>Parameters</h3>
+                  <button type="button" className="sup-add-param-btn" onClick={() => addParameter(section.id)}>
+                    <MdAdd /> Add Parameter
+                  </button>
+                </div>
+
+                <div className="sup-params-head">
+                  <span>Parameter Name</span>
+                  <span>Value</span>
+                  <span>Unit</span>
+                  <span>Normal Range</span>
+                  <span>Status</span>
+                  <span></span>
+                </div>
+
+                {section.parameters.map(param => (
+                  <div key={param.id} className="sup-param-row">
+                    <input
+                      type="text"
+                      value={param.name}
+                      onChange={e => updateParameter(section.id, param.id, 'name', e.target.value)}
+                      placeholder="e.g., Hemoglobin"
+                    />
+                    <input
+                      type="text"
+                      value={param.value}
+                      onChange={e => updateParameter(section.id, param.id, 'value', e.target.value)}
+                      placeholder="14.5"
+                    />
+                    <input
+                      type="text"
+                      value={param.unit}
+                      onChange={e => updateParameter(section.id, param.id, 'unit', e.target.value)}
+                      placeholder="g/dL"
+                    />
+                    <input
+                      type="text"
+                      value={param.normalRange}
+                      onChange={e => updateParameter(section.id, param.id, 'normalRange', e.target.value)}
+                      placeholder="12–16"
+                    />
+                    <select
+                      value={param.status}
+                      onChange={e => updateParameter(section.id, param.id, 'status', e.target.value)}
+                      className={`sup-param-status-sel ${getStatusClass(param.status)}`}
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="High">High</option>
+                      <option value="Low">Low</option>
+                      <option value="Critical">Critical</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="sup-del-btn"
+                      onClick={() => removeParameter(section.id, param.id)}
+                      disabled={section.parameters.length === 1}
+                    >
+                      <MdDelete />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="sup-field" style={{ marginTop: '16px' }}>
+                <label>Findings for {section.test_name_choice || 'this test'}</label>
+                <textarea
+                  value={section.findings}
+                  onChange={e => updateTestSection(section.id, 'findings', e.target.value)}
+                  placeholder="Enter findings specific to this test..."
+                  rows={3}
+                />
+              </div>
+            </div>
           </div>
+        ))}
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '8px' }}>
+          <button type="button" className="sup-add-test-section-btn" onClick={addTestSection}>
+            <MdAdd /> Add Another Test Section
+          </button>
         </div>
 
-        {/* ── 5. FILE + IMAGE UPLOAD ── */}
+        {/* FILE UPLOAD */}
+        {/* FILE UPLOAD */}
         <div className="sup-card">
           <div className="sup-card-head">
             <div className="sup-card-head-icon sup-icon--pink"><MdAttachFile /></div>
-            <h2>Upload Files & Images</h2>
+            <h2>Upload Files & Images (Multiple)</h2>
           </div>
           <div className="sup-card-body">
             <div className="sup-grid-2">
-
-              {/* PDF / DOC */}
+              
+              {/* DOCUMENTS */}
               <div className="sup-field">
-                <label>Report File (PDF / DOC)</label>
-                {!reportFile ? (
-                  <label className="sup-upload-zone">
-                    <input type="file" accept=".pdf,.doc,.docx" onChange={e => setReportFile(e.target.files[0])} hidden />
-                    <MdAttachFile className="sup-upload-zone-icon" />
-                    <span className="sup-upload-zone-title">Click or drag to upload</span>
-                    <span className="sup-upload-zone-sub">PDF, DOC, DOCX — Max 10MB</span>
-                  </label>
-                ) : (
-                  <div className="sup-file-preview">
-                    <MdAttachFile className="sup-file-preview-icon" />
-                    <div className="sup-file-preview-info">
-                      <span className="sup-file-name">{reportFile.name}</span>
-                      <span className="sup-file-size">{formatFileSize(reportFile.size)}</span>
-                    </div>
-                    <button type="button" className="sup-file-remove" onClick={() => setReportFile(null)}>
-                      <MdClose />
-                    </button>
+                <label>Report Files (PDF / DOC)</label>
+                
+                {/* Show existing files */}
+                {reportFiles.length > 0 && (
+                  <div style={{ marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {reportFiles.map((file, idx) => (
+                      <div key={idx} className="sup-file-preview">
+                        <MdAttachFile className="sup-file-preview-icon" />
+                        <div className="sup-file-preview-info">
+                          <span className="sup-file-name">{file.name}</span>
+                          <span className="sup-file-size">{formatFileSize(file.size)}</span>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="sup-file-remove" 
+                          onClick={() => setReportFiles(reportFiles.filter((_, i) => i !== idx))}
+                        >
+                          <MdClose />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
+                
+                {/* Upload zone */}
+                <label className="sup-upload-zone">
+                  <input 
+                    type="file" 
+                    accept=".pdf,.doc,.docx" 
+                    multiple 
+                    onChange={e => {
+                      const newFiles = Array.from(e.target.files);
+                      setReportFiles([...reportFiles, ...newFiles]);
+                      e.target.value = ''; // Reset input
+                    }} 
+                    hidden 
+                  />
+                  <MdAttachFile className="sup-upload-zone-icon" />
+                  <span className="sup-upload-zone-title">Click to add files</span>
+                  <span className="sup-upload-zone-sub">PDF, DOC, DOCX — Max 10MB each • Multiple files</span>
+                </label>
               </div>
 
-              {/* Image */}
+              {/* IMAGES */}
               <div className="sup-field">
-                <label>Report Image (JPG / PNG)</label>
-                {!reportImage ? (
-                  <label className="sup-upload-zone sup-upload-zone--image">
-                    <input type="file" accept="image/*" onChange={e => setReportImage(e.target.files[0])} hidden />
-                    <MdImage className="sup-upload-zone-icon" />
-                    <span className="sup-upload-zone-title">Click or drag to upload</span>
-                    <span className="sup-upload-zone-sub">JPG, PNG, WEBP — Max 5MB</span>
-                  </label>
-                ) : (
-                  <div className="sup-file-preview">
-                    <MdImage className="sup-file-preview-icon sup-file-preview-icon--img" />
-                    <div className="sup-file-preview-info">
-                      <span className="sup-file-name">{reportImage.name}</span>
-                      <span className="sup-file-size">{formatFileSize(reportImage.size)}</span>
-                    </div>
-                    <button type="button" className="sup-file-remove" onClick={() => setReportImage(null)}>
-                      <MdClose />
-                    </button>
+                <label>Report Images (JPG / PNG)</label>
+                
+                {/* Show existing images */}
+                {reportImages.length > 0 && (
+                  <div style={{ marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {reportImages.map((image, idx) => (
+                      <div key={idx} className="sup-file-preview">
+                        <MdImage className="sup-file-preview-icon sup-file-preview-icon--img" />
+                        <div className="sup-file-preview-info">
+                          <span className="sup-file-name">{image.name}</span>
+                          <span className="sup-file-size">{formatFileSize(image.size)}</span>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="sup-file-remove" 
+                          onClick={() => setReportImages(reportImages.filter((_, i) => i !== idx))}
+                        >
+                          <MdClose />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
+                
+                {/* Upload zone */}
+                <label className="sup-upload-zone sup-upload-zone--image">
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    onChange={e => {
+                      const newImages = Array.from(e.target.files);
+                      setReportImages([...reportImages, ...newImages]);
+                      e.target.value = ''; // Reset input
+                    }} 
+                    hidden 
+                  />
+                  <MdImage className="sup-upload-zone-icon" />
+                  <span className="sup-upload-zone-title">Click to add images</span>
+                  <span className="sup-upload-zone-sub">JPG, PNG, WEBP — Max 5MB each • Multiple images</span>
+                </label>
               </div>
-
+              
             </div>
           </div>
         </div>
 
-        {/* ── 6. NOTES ── */}
+        {/* NOTES */}
         <div className="sup-card">
           <div className="sup-card-head">
             <div className="sup-card-head-icon sup-icon--orange"><MdNotes /></div>
@@ -528,25 +737,20 @@ const StaffUpload = () => {
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                placeholder="Enter any additional observations, remarks, or clinical notes..."
+                placeholder="Enter general observations, remarks, or clinical notes for the entire report..."
                 rows={6}
               />
             </div>
           </div>
         </div>
 
-        {/* ── ACTIONS ── */}
+        {/* ACTIONS */}
         <div className="sup-form-actions">
           <button type="button" className="sup-btn-cancel" onClick={handleReset} disabled={submitting}>
             <MdCancel /> Cancel
           </button>
-          <button
-            type="submit"
-            className="sup-btn-submit"
-            disabled={!selectedPatient || !selectedDoctor || submitting}
-          >
-            <MdUpload />
-            {submitting ? 'Uploading...' : 'Upload Report'}
+          <button type="submit" className="sup-btn-submit" disabled={!selectedPatient || !selectedDoctor || submitting}>
+            <MdUpload /> {submitting ? 'Uploading...' : 'Upload Report'}
           </button>
         </div>
 

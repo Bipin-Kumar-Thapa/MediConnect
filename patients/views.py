@@ -140,12 +140,21 @@ def patient_overview(request):
 
     recent_lab_reports_list = []
     for report in recent_lab_reports:
+        # Get test names from test_sections
+        test_sections = report.test_sections.all()
+        if test_sections.exists():
+            if test_sections.count() == 1:
+                test_name = test_sections.first().get_test_name()
+            else:
+                test_name = f"{test_sections.count()} Tests"
+        else:
+            test_name = "Lab Report"
+        
         recent_lab_reports_list.append({
             'id': report.id,
-            'test_name': report.test_name,
+            'test_name': test_name,
             'date': report.test_date.strftime('%b %d, %Y'),
-            'status': report.status,
-            'category': report.category or 'General',
+            'status': report.overall_status,  # Changed from report.status
         })
 
     def get_time_ago(past_datetime):
@@ -220,14 +229,24 @@ def patient_overview(request):
     recent_labs = LabReport.objects.filter(
         patient=profile,
         created_at__gte=yesterday
-    ).order_by('-created_at')[:3]  # Show up to 3 recent lab reports
+    ).order_by('-created_at')[:3]
 
     for lab in recent_labs:
+        # Get test name
+        test_sections = lab.test_sections.all()
+        if test_sections.exists():
+            if test_sections.count() == 1:
+                test_name = test_sections.first().get_test_name()
+            else:
+                test_name = f"{test_sections.count()} tests"
+        else:
+            test_name = "lab report"
+        
         notifications_list.append({
             'id': notif_id,
             'title': '🧪 Lab Results Ready',
-            'message': f"Your {lab.test_name} results are now available",
-            'priority': 'high' if lab.status == 'critical' else 'medium',
+            'message': f"Your {test_name} results are now available",
+            'priority': 'high' if lab.overall_status == 'critical' else 'medium',  # ✅ Changed
             'time': get_time_ago(lab.created_at)
         })
         notif_id += 1
@@ -1080,15 +1099,20 @@ def get_lab_reports(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
+    from staff.models import LabReport
+    from django.db.models import Q
+    from datetime import timedelta
+    
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
     time_period = request.GET.get('time_period', 'last_month') 
     page = int(request.GET.get('page', 1))
     per_page = 10
     
+    # ✅ FIXED: Changed prefetch_related to use test_sections
     lab_reports = LabReport.objects.filter(patient=profile).select_related(
         'uploaded_by__user', 'doctor__user'
-    ).prefetch_related('parameters')
+    ).prefetch_related('test_sections__parameters','attachments')
     
     # Time Period Filter
     if time_period != 'all':
@@ -1114,26 +1138,25 @@ def get_lab_reports(request):
             year = int(time_period)
             lab_reports = lab_reports.filter(test_date__year=year)
     
-    # Filter by status OR completion
+    # ✅ FIXED: Changed status to overall_status
     if status_filter == 'pending':
         lab_reports = lab_reports.filter(is_completed=False)
     elif status_filter in ['normal', 'abnormal', 'critical']:
-        lab_reports = lab_reports.filter(status=status_filter, is_completed=True)
+        lab_reports = lab_reports.filter(overall_status=status_filter, is_completed=True)
     elif status_filter != 'all':
-        lab_reports = lab_reports.filter(status=status_filter)
+        lab_reports = lab_reports.filter(overall_status=status_filter)
     
-    # Search filter
+    # ✅ FIXED: Removed search by test_name and category (they don't exist anymore)
     if search_query:
         lab_reports = lab_reports.filter(
             Q(report_number__icontains=search_query) |
-            Q(test_name__icontains=search_query) |
-            Q(category__icontains=search_query)
-        )
+            Q(test_sections__test_name_choice__icontains=search_query)
+        ).distinct()
     
     # Order by test date (newest first)
     lab_reports = lab_reports.order_by('-test_date', '-created_at')
     
-    # ✅ Pagination
+    # Pagination
     total_count = lab_reports.count()
     total_pages = max(1, (total_count + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
@@ -1149,21 +1172,53 @@ def get_lab_reports(request):
         if report.uploaded_by:
             uploaded_by = f"Lab Tech - {report.uploaded_by.user.get_full_name()}"
         
-        # Get parameters
-        parameters = []
-        for param in report.parameters.all():
-            parameters.append({
-                'name': param.name,
-                'value': param.value,
-                'unit': param.unit,
-                'normalRange': param.normal_range,
-                'status': param.status
+        # ✅ NEW: Get test sections
+        test_sections_data = []
+        for section in report.test_sections.all():
+            parameters = []
+            for param in section.parameters.all():
+                parameters.append({
+                    'name': param.name,
+                    'value': param.value,
+                    'unit': param.unit,
+                    'normalRange': param.normal_range,
+                    'status': param.status
+                })
+            
+            test_sections_data.append({
+                'test_name': section.get_test_name(),
+                'category': section.get_category_display_name(),
+                'status': section.status,
+                'findings': section.findings or '',
+                'parameters': parameters,
+            })
+        
+        # Get test names for display
+        if test_sections_data:
+            if len(test_sections_data) == 1:
+                test_name = test_sections_data[0]['test_name']
+                category = test_sections_data[0]['category']
+            else:
+                test_name = f"{len(test_sections_data)} Tests"
+                categories = list(set([s['category'] for s in test_sections_data]))
+                category = ', '.join(categories) if len(categories) <= 2 else 'Multiple'
+        else:
+            test_name = "Lab Report"
+            category = "General"
+
+        # ✅ NEW: Get attachments from LabReportAttachment model
+        attachments_data = []
+        for attachment in report.attachments.all():
+            attachments_data.append({
+                'id': attachment.id,
+                'type': attachment.attachment_type,  # 'document' or 'image'
+                'url': request.build_absolute_uri(attachment.file.url) if attachment.file else None,
+                'filename': attachment.file.name.split('/')[-1] if attachment.file else None,
             })
         
         # Get uploaded files
         uploaded_files = []
         
-        # Add PDF file if exists
         if report.report_file:
             uploaded_files.append({
                 'type': 'pdf',
@@ -1171,7 +1226,6 @@ def get_lab_reports(request):
                 'url': request.build_absolute_uri(report.report_file.url)
             })
         
-        # Add image if exists
         if report.report_image:
             uploaded_files.append({
                 'type': 'image',
@@ -1183,36 +1237,36 @@ def get_lab_reports(request):
         if not report.is_completed:
             display_status = 'pending'
         else:
-            display_status = report.status
+            display_status = report.overall_status
         
         reports_list.append({
             'id': report.id,
             'reportNumber': report.report_number,
-            'testName': report.test_name,
-            'category': report.category or 'General',
+            'testName': test_name,
+            'category': category,
             'date': report.test_date.isoformat(),
             'uploadedBy': uploaded_by,
             'uploadedDate': report.created_at.date().isoformat(),
             'status': display_status,
             'isCompleted': report.is_completed,
-            'findings': report.findings or '',
             'notes': report.notes or '',
             'hasFile': bool(report.report_file) or bool(report.report_image),
-            'parameters': parameters,
+            'test_sections': test_sections_data,  # ✅ NEW: Include test sections
+            'attachments': attachments_data,
             'uploadedFiles': uploaded_files,
         })
     
-    # Stats (always from full dataset, not filtered)
+    # ✅ FIXED: Stats use overall_status
     all_reports = LabReport.objects.filter(patient=profile)
     stats = {
         'total': all_reports.count(),
-        'normal': all_reports.filter(status='normal', is_completed=True).count(),
-        'abnormal': all_reports.filter(status='abnormal', is_completed=True).count(),
-        'critical': all_reports.filter(status='critical', is_completed=True).count(),
+        'normal': all_reports.filter(overall_status='normal', is_completed=True).count(),
+        'abnormal': all_reports.filter(overall_status='abnormal', is_completed=True).count(),
+        'critical': all_reports.filter(overall_status='critical', is_completed=True).count(),
         'pending': all_reports.filter(is_completed=False).count(),
     }
     
-    # ✅ Get available years for filter dropdown
+    # Get available years for filter dropdown
     years = all_reports.dates('test_date', 'year', order='DESC')
     available_years = [year.year for year in years]
     
@@ -1227,7 +1281,7 @@ def get_lab_reports(request):
             'has_next': page < total_pages,
             'has_prev': page > 1,
         },
-        'available_years': available_years,  # ✅ NEW
+        'available_years': available_years,
     })
 
 
@@ -1237,7 +1291,7 @@ def download_lab_report(request, report_id):
     """
     Download complete lab report as PDF with:
     - Report details
-    - Parameters table
+    - Test sections with parameters
     - Images (one per page with caption)
     - Merged uploaded PDF (if exists)
     """
@@ -1318,15 +1372,15 @@ def download_lab_report(request, report_id):
     story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#8B5CF6')))
     story.append(Spacer(1, 5*mm))
     
-    # Report Number & Status
+    # ✅ FIXED: Changed report.status to report.overall_status
     status_color = {
         'normal': '#10B981',
         'abnormal': '#F59E0B',
         'critical': '#EF4444',
         'pending': '#6366F1'
-    }.get(report.status if report.is_completed else 'pending', '#6B7280')
+    }.get(report.overall_status if report.is_completed else 'pending', '#6B7280')
     
-    status_text = report.status.upper() if report.is_completed else 'PENDING'
+    status_text = report.overall_status.upper() if report.is_completed else 'PENDING'
     
     info_data = [
         [
@@ -1348,15 +1402,25 @@ def download_lab_report(request, report_id):
     # Patient & Test Info
     patient_name = profile.user.get_full_name() or profile.user.username
     
+    # ✅ NEW: Get test names from test_sections
+    test_sections = report.test_sections.all()
+    if test_sections.exists():
+        if test_sections.count() == 1:
+            test_name = test_sections.first().get_test_name()
+        else:
+            test_name = f"{test_sections.count()} Tests"
+    else:
+        test_name = "Lab Report"
+    
     details_data = [
         [Paragraph("<b>PATIENT INFORMATION</b>", label_style),
          Paragraph("<b>TEST INFORMATION</b>", label_style)],
         [Paragraph(f"<b>{patient_name}</b>", normal_style),
-         Paragraph(f"<b>{report.test_name}</b>", normal_style)],
+         Paragraph(f"<b>{test_name}</b>", normal_style)],
         [Paragraph(f"ID: {profile.patient_id}", normal_style),
-         Paragraph(f"Category: {report.get_category_display_name()}", normal_style)],
-        [Paragraph(f"Age: {profile.age or 'N/A'} | Gender: {profile.get_gender_display_short() or 'N/A'}", normal_style),
          Paragraph(f"Test Date: {report.test_date.strftime('%b %d, %Y')}", normal_style)],
+        [Paragraph(f"Age: {profile.age or 'N/A'} | Gender: {profile.get_gender_display_short() or 'N/A'}", normal_style),
+         Paragraph("", normal_style)],
     ]
     
     if report.uploaded_by:
@@ -1377,69 +1441,91 @@ def download_lab_report(request, report_id):
     story.append(Spacer(1, 5*mm))
     
     # ═══════════════════════════════════════════
-    # Parameters Table (if exists)
+    # ✅ NEW: Test Sections with Parameters
     # ═══════════════════════════════════════════
-    if report.parameters.exists():
-        story.append(Paragraph("TEST PARAMETERS", section_style))
-        story.append(Spacer(1, 2*mm))
-        
-        param_header = [
-            Paragraph('<b>Parameter</b>', normal_style),
-            Paragraph('<b>Value</b>', normal_style),
-            Paragraph('<b>Normal Range</b>', normal_style),
-            Paragraph('<b>Status</b>', normal_style),
-        ]
-        param_rows = [param_header]
-        
-        for param in report.parameters.all():
-            status_badge_color = {
-                'Normal': '#10B981',
-                'High': '#EF4444',
-                'Low': '#3B82F6'
-            }.get(param.status, '#6B7280')
+    if test_sections.exists():
+        for section in test_sections:
+            # Section header
+            story.append(Paragraph(
+                f"{section.get_test_name()} - {section.get_category_display_name()}", 
+                section_style
+            ))
             
-            param_rows.append([
-                Paragraph(param.name, normal_style),
-                Paragraph(f"{param.value} {param.unit}", normal_style),
-                Paragraph(param.normal_range, normal_style),
-                Paragraph(f"<font color='{status_badge_color}'><b>{param.status}</b></font>", normal_style),
-            ])
-        
-        param_table = Table(param_rows, colWidths=[50*mm, 35*mm, 50*mm, 35*mm])
-        param_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#8B5CF6')),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor('#F9FAFB'), colors.white]),
-            ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#E5E7EB')),
-            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
-            ('TOPPADDING', (0,0), (-1,-1), 8),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-            ('LEFTPADDING', (0,0), (-1,-1), 8),
-        ]))
-        story.append(param_table)
-        story.append(Spacer(1, 5*mm))
+            # Section status
+            section_status_color = {
+                'Normal': '#10B981',
+                'Abnormal': '#F59E0B',
+                'Critical': '#EF4444'
+            }.get(section.status, '#6B7280')
+            
+            story.append(Paragraph(
+                f"<b>Result:</b> <font color='{section_status_color}'>{section.status.upper()}</font>",
+                normal_style
+            ))
+            story.append(Spacer(1, 2*mm))
+            
+            # Findings for this section
+            if section.findings:
+                findings_data = [[Paragraph(f"<b>Findings:</b> {section.findings}", normal_style)]]
+                findings_table = Table(findings_data, colWidths=[170*mm])
+                findings_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F0F9FF')),
+                    ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#3B82F6')),
+                    ('TOPPADDING', (0,0), (-1,-1), 8),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+                    ('LEFTPADDING', (0,0), (-1,-1), 10),
+                ]))
+                story.append(findings_table)
+                story.append(Spacer(1, 3*mm))
+            
+            # Parameters table for this section
+            parameters = section.parameters.all()
+            if parameters.exists():
+                param_header = [
+                    Paragraph('<b>Parameter</b>', normal_style),
+                    Paragraph('<b>Value</b>', normal_style),
+                    Paragraph('<b>Normal Range</b>', normal_style),
+                    Paragraph('<b>Status</b>', normal_style),
+                ]
+                param_rows = [param_header]
+                
+                for param in parameters:
+                    status_badge_color = {
+                        'Normal': '#10B981',
+                        'High': '#EF4444',
+                        'Low': '#3B82F6',
+                        'Critical': '#DC2626'
+                    }.get(param.status, '#6B7280')
+                    
+                    param_rows.append([
+                        Paragraph(param.name, normal_style),
+                        Paragraph(f"{param.value} {param.unit or ''}", normal_style),
+                        Paragraph(param.normal_range or '-', normal_style),
+                        Paragraph(f"<font color='{status_badge_color}'><b>{param.status}</b></font>", normal_style),
+                    ])
+                
+                param_table = Table(param_rows, colWidths=[50*mm, 35*mm, 50*mm, 35*mm])
+                param_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#8B5CF6')),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.HexColor('#F9FAFB'), colors.white]),
+                    ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#E5E7EB')),
+                    ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E5E7EB')),
+                    ('TOPPADDING', (0,0), (-1,-1), 8),
+                    ('BOTTOMPADDING', (0,0), (-1,-1), 8),
+                    ('LEFTPADDING', (0,0), (-1,-1), 8),
+                ]))
+                story.append(param_table)
+                story.append(Spacer(1, 5*mm))
     
-    # Findings
-    if report.findings:
-        story.append(Paragraph("FINDINGS", section_style))
-        findings_data = [[Paragraph(report.findings, normal_style)]]
-        findings_table = Table(findings_data, colWidths=[170*mm])
-        findings_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F0F9FF')),
-            ('BOX', (0,0), (-1,-1), 1, colors.HexColor('#3B82F6')),
-            ('TOPPADDING', (0,0), (-1,-1), 10),
-            ('BOTTOMPADDING', (0,0), (-1,-1), 10),
-            ('LEFTPADDING', (0,0), (-1,-1), 10),
-        ]))
-        story.append(findings_table)
-        story.append(Spacer(1, 5*mm))
+    # ✅ REMOVED: Old findings section (now shown per test section)
     
-    # Notes
+    # Notes (overall report notes)
     if report.notes:
         story.append(Paragraph("NOTES & RECOMMENDATIONS", section_style))
-        note_color = '#FEF2F2' if report.status == 'critical' else '#FFFBEB'
-        border_color = '#DC2626' if report.status == 'critical' else '#F59E0B'
+        note_color = '#FEF2F2' if report.overall_status == 'critical' else '#FFFBEB'
+        border_color = '#DC2626' if report.overall_status == 'critical' else '#F59E0B'
         
         notes_data = [[Paragraph(report.notes, normal_style)]]
         notes_table = Table(notes_data, colWidths=[170*mm])

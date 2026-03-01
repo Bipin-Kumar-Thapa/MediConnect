@@ -12,7 +12,8 @@ import '../../styles/staff/StaffLabReport.css';
 const getCSRF = () =>
   document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
 
-const CATEGORIES = ['Hematology','Biochemistry','Endocrinology','Microbiology','Radiology','Immunology','Pathology'];
+const CATEGORIES = ['Hematology','Biochemistry','Endocrinology','Microbiology','Radiology','Other'];
+const TEST_NAMES = ['CBC','LFT','KFT','Lipid Profile','Thyroid Panel','HbA1c','Urinalysis','ESR','CRP','Vitamin D','Vitamin B12','Iron Studies','Electrolytes','Blood Gas','Coagulation','Other'];
 
 const StaffLabReports = () => {
   const navigate = useNavigate();
@@ -36,10 +37,13 @@ const StaffLabReports = () => {
   const [editPatients, setEditPatients]         = useState([]);
   const [editDoctors, setEditDoctors]           = useState([]);
   const [editForm, setEditForm]                 = useState({});
-  const [editParams, setEditParams]             = useState([]);
-  const [editFile, setEditFile]                 = useState(null);
-  const [editImage, setEditImage]               = useState(null);
+  const [editTestSections, setEditTestSections] = useState([]);
+  // ✅ NEW: Support multiple files
+  const [editFiles, setEditFiles]               = useState([]);
+  const [editImages, setEditImages]             = useState([]);
+  const [existingAttachments, setExistingAttachments] = useState([]);
   const [loadingEditDoctors, setLoadingEditDoctors] = useState(false);
+  const [deletingAttachment, setDeletingAttachment] = useState(null);
 
   const highlightRef = useRef(null);
   const filters = ['All','Normal','Abnormal','Critical','Completed','Pending'];
@@ -75,23 +79,67 @@ const StaffLabReports = () => {
   const onFilter = (f)  => { setActiveFilter(f); setCurrentPage(1); };
   const onPage   = (p)  => { setCurrentPage(p); window.scrollTo({ top:0, behavior:'smooth' }); };
 
+  // Helper: Get test names from sections
+  const getTestNamesDisplay = (sections) => {
+    if (!sections || sections.length === 0) return 'No tests';
+    if (sections.length === 1) return sections[0].test_name;
+    return `${sections.length} Tests`;
+  };
+
+  // Helper: Get categories from sections
+  const getCategoriesDisplay = (sections) => {
+    if (!sections || sections.length === 0) return 'N/A';
+    const cats = [...new Set(sections.map(s => s.category))];
+    if (cats.length === 1) return cats[0];
+    return 'Multiple';
+  };
+
   // ── Open Edit Modal ──
   const openEdit = async (r) => {
     setEditError('');
     setEditSuccess('');
-    setEditFile(null);
-    setEditImage(null);
+    setEditFiles([]);
+    setEditImages([]);
+    
+    // ✅ NEW: Load existing attachments
+    setExistingAttachments(r.attachments || []);
+    
     setEditForm({
       patient_id:     r.patient_db_id,
       doctor_id:      r.doctor_db_id || '',
-      test_name:      r.test_name,
       test_date:      r.test_date_raw,
-      category:       r.category_raw,
-      overall_status: r.status,
       is_completed:   r.is_completed,
       notes:          r.notes || '',
     });
-    setEditParams(r.parameters.map((p, i) => ({ ...p, id: i })));
+
+    // Convert test_sections to editable format
+    const sections = (r.test_sections || []).map((section, idx) => ({
+      id: idx + 1,
+      test_name_choice: section.test_name || '',
+      custom_test_name: '',
+      category: section.category ? section.category.toLowerCase() : '',
+      status: section.status || 'Normal',
+      findings: section.findings || '',
+      parameters: (section.parameters || []).map((p, i) => ({
+        id: i + 1,
+        name: p.name || '',
+        value: p.value || '',
+        unit: p.unit || '',
+        normalRange: p.normalRange || '',
+        status: p.status || 'Normal'
+      }))
+    }));
+
+    setEditTestSections(sections.length > 0 ? sections : [{
+      id: 1,
+      test_name_choice: '',
+      custom_test_name: '',
+      category: '',
+      status: 'Normal',
+      findings: '',
+      parameters: [{ id: 1, name: '', value: '', unit: '', normalRange: '', status: 'Normal' }]
+    }]);
+
     setEditReport(r);
 
     // Fetch patients if not loaded
@@ -123,15 +171,156 @@ const StaffLabReports = () => {
     setLoadingEditDoctors(false);
   };
 
-  // ── Edit Parameters ──
-  const addEditParam = () => {
-    setEditParams(p => [...p, { id: Date.now(), name:'', value:'', unit:'', normalRange:'', status:'Normal' }]);
+  // ✅ NEW: Handle multiple file selection
+  const handleFilesChange = (e) => {
+    const files = Array.from(e.target.files);
+    setEditFiles(prev => [...prev, ...files]);
   };
-  const removeEditParam = (id) => {
-    if (editParams.length > 1) setEditParams(p => p.filter(x => x.id !== id));
+
+  const handleImagesChange = (e) => {
+    const files = Array.from(e.target.files);
+    setEditImages(prev => [...prev, ...files]);
   };
-  const updateEditParam = (id, field, val) => {
-    setEditParams(p => p.map(x => x.id === id ? { ...x, [field]: val } : x));
+
+  const removeNewFile = (index) => {
+    setEditFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeNewImage = (index) => {
+    setEditImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // ✅ NEW: Delete existing attachment
+  const handleDeleteAttachment = async (attachmentId) => {
+    if (!window.confirm('Are you sure you want to delete this attachment?')) return;
+    
+    setDeletingAttachment(attachmentId);
+    try {
+      const res = await fetch(`http://localhost:8000/staff/attachments/${attachmentId}/delete/`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { 'X-CSRFToken': getCSRF() },
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        setExistingAttachments(prev => prev.filter(a => a.id !== attachmentId));
+        setEditSuccess('Attachment deleted successfully');
+        setTimeout(() => setEditSuccess(''), 2000);
+      } else {
+        setEditError(data.error || 'Failed to delete attachment');
+      }
+    } catch (e) {
+      setEditError('Network error. Please try again.');
+    } finally {
+      setDeletingAttachment(null);
+    }
+  };
+
+  // ── Test Section Management ──
+  const addTestSection = () => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot add test sections to completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    setEditTestSections([...editTestSections, {
+      id: Date.now(),
+      test_name_choice: '',
+      custom_test_name: '',
+      category: '',
+      status: 'Normal',
+      findings: '',
+      parameters: [{ id: Date.now(), name: '', value: '', unit: '', normalRange: '', status: 'Normal' }]
+    }]);
+  };
+
+  const removeTestSection = (sectionId) => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot modify test sections of completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    if (editTestSections.length > 1) {
+      setEditTestSections(editTestSections.filter(s => s.id !== sectionId));
+    }
+  };
+
+  const updateTestSection = (sectionId, field, value) => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot modify completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    setEditTestSections(editTestSections.map(section =>
+      section.id === sectionId ? { ...section, [field]: value } : section
+    ));
+  };
+
+  // ── Parameters Management ──
+  const addParameter = (sectionId) => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot add parameters to completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    setEditTestSections(editTestSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: [...section.parameters, {
+              id: Date.now(),
+              name: '',
+              value: '',
+              unit: '',
+              normalRange: '',
+              status: 'Normal'
+            }]
+          }
+        : section
+    ));
+  };
+
+  const removeParameter = (sectionId, paramId) => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot modify parameters of completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    setEditTestSections(editTestSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: section.parameters.length > 1
+              ? section.parameters.filter(p => p.id !== paramId)
+              : section.parameters
+          }
+        : section
+    ));
+  };
+
+  const updateParameter = (sectionId, paramId, field, value) => {
+    // ✅ Check if completed
+    if (editForm.is_completed) {
+      alert('Cannot modify completed reports. Please mark as pending first.');
+      return;
+    }
+    
+    setEditTestSections(editTestSections.map(section =>
+      section.id === sectionId
+        ? {
+            ...section,
+            parameters: section.parameters.map(param =>
+              param.id === paramId ? { ...param, [field]: value } : param
+            )
+          }
+        : section
+    ));
   };
 
   const paramStatusClass = (s) => ({
@@ -146,15 +335,14 @@ const StaffLabReports = () => {
       const fd = new FormData();
       fd.append('patient_id',     editForm.patient_id);
       fd.append('doctor_id',      editForm.doctor_id || '');
-      fd.append('test_name',      editForm.test_name);
       fd.append('test_date',      editForm.test_date);
-      fd.append('category',       editForm.category);
-      fd.append('overall_status', editForm.overall_status);
       fd.append('is_completed',   editForm.is_completed ? 'true' : 'false');
       fd.append('notes',          editForm.notes);
-      fd.append('parameters',     JSON.stringify(editParams));
-      if (editFile)  fd.append('report_file',  editFile);
-      if (editImage) fd.append('report_image', editImage);
+      fd.append('test_sections',  JSON.stringify(editTestSections));
+      
+      // ✅ NEW: Append multiple files
+      editFiles.forEach(file => fd.append('report_files', file));
+      editImages.forEach(image => fd.append('report_images', image));
 
       const res = await fetch(`http://localhost:8000/staff/lab-reports/${editReport.id}/edit/`, {
         method: 'POST', credentials: 'include',
@@ -270,9 +458,21 @@ const StaffLabReports = () => {
 
               {/* Details */}
               <div className="slr-card-details">
-                <div className="slr-card-row"><FaFlask className="slr-ico slr-ico--purple" /><span className="slr-card-key">Test:</span><span className="slr-card-val">{r.test_name}</span></div>
-                <div className="slr-card-row"><FaUserMd className="slr-ico slr-ico--green" /><span className="slr-card-key">Doctor:</span><span className="slr-card-val">{r.doctor}</span></div>
-                <div className="slr-card-row"><MdScience className="slr-ico slr-ico--blue" /><span className="slr-card-key">Category:</span><span className="slr-cat">{r.category}</span></div>
+                <div className="slr-card-row">
+                  <FaFlask className="slr-ico slr-ico--purple" />
+                  <span className="slr-card-key">Tests:</span>
+                  <span className="slr-card-val">{getTestNamesDisplay(r.test_sections)}</span>
+                </div>
+                <div className="slr-card-row">
+                  <FaUserMd className="slr-ico slr-ico--green" />
+                  <span className="slr-card-key">Doctor:</span>
+                  <span className="slr-card-val">{r.doctor}</span>
+                </div>
+                <div className="slr-card-row">
+                  <MdScience className="slr-ico slr-ico--blue" />
+                  <span className="slr-card-key">Categories:</span>
+                  <span className="slr-cat">{getCategoriesDisplay(r.test_sections)}</span>
+                </div>
               </div>
 
               {/* Right */}
@@ -311,7 +511,10 @@ const StaffLabReports = () => {
             <div className="slr-modal-head">
               <div className="slr-modal-title">
                 <div className="slr-modal-ico"><FaFlask /></div>
-                <div><h2>{selectedReport.test_name}</h2><code>{selectedReport.report_number}</code></div>
+                <div>
+                  <h2>{getTestNamesDisplay(selectedReport.test_sections)}</h2>
+                  <code>{selectedReport.report_number}</code>
+                </div>
               </div>
               <button className="slr-modal-x" onClick={() => setSelectedReport(null)}><MdClose /></button>
             </div>
@@ -331,11 +534,11 @@ const StaffLabReports = () => {
                 </div>
                 <div className="slr-mi slr-mi--purple">
                   <div className="slr-mi-ico"><MdCalendarToday /></div>
-                  <div><p>Date & Category</p><h4>{selectedReport.date}</h4><span>{selectedReport.category}</span></div>
+                  <div><p>Test Date</p><h4>{selectedReport.date}</h4></div>
                 </div>
                 <div className="slr-mi slr-mi--orange">
                   <div className="slr-mi-ico"><MdScience /></div>
-                  <div><p>Result & Status</p>
+                  <div><p>Overall Status</p>
                     <div className="slr-mi-badges">
                       {resultBadge(selectedReport.status)}
                       {statusBadge(selectedReport.is_completed)}
@@ -343,67 +546,61 @@ const StaffLabReports = () => {
                   </div>
                 </div>
               </div>
-              {selectedReport.parameters.length > 0 && (
+
+              {/* Test Sections */}
+              {selectedReport.test_sections && selectedReport.test_sections.length > 0 && (
                 <div className="slr-modal-sec">
-                  <h3><FaFlask /> Test Parameters</h3>
-                  <div className="slr-tbl-wrap">
-                    <table className="slr-tbl">
-                      <thead><tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Status</th></tr></thead>
-                      <tbody>
-                        {selectedReport.parameters.map((p,i) => (
-                          <tr key={i}>
-                            <td className="slr-pm-name">{p.name}</td>
-                            <td className="slr-pm-val">{p.value}</td>
-                            <td className="slr-pm-unit">{p.unit}</td>
-                            <td className="slr-pm-range">{p.normalRange}</td>
-                            <td><span className={`slr-pm-badge ${paramStatusClass(p.status)}`}>{p.status}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <h3><FaFlask /> Test Sections</h3>
+                  {selectedReport.test_sections.map((section, idx) => (
+                    <div key={idx} style={{ marginBottom: '20px', padding: '16px', background: '#f8fafc', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
+                      <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', marginBottom: '8px' }}>
+                        {section.test_name} • {section.category} • {resultBadge(section.status)}
+                      </h4>
+                      {section.findings && <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px' }}>{section.findings}</p>}
+                      
+                      {section.parameters && section.parameters.length > 0 && (
+                        <div className="slr-tbl-wrap">
+                          <table className="slr-tbl">
+                            <thead><tr><th>Parameter</th><th>Value</th><th>Unit</th><th>Normal Range</th><th>Status</th></tr></thead>
+                            <tbody>
+                              {section.parameters.map((p,i) => (
+                                <tr key={i}>
+                                  <td className="slr-pm-name">{p.name}</td>
+                                  <td className="slr-pm-val">{p.value}</td>
+                                  <td className="slr-pm-unit">{p.unit}</td>
+                                  <td className="slr-pm-range">{p.normalRange}</td>
+                                  <td><span className={`slr-pm-badge ${paramStatusClass(p.status)}`}>{p.status}</span></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
+
               {selectedReport.notes && <div className="slr-notes"><h3>📝 Notes</h3><p>{selectedReport.notes}</p></div>}
               
-              {/* Attachments */}
-              {(selectedReport.file_url || selectedReport.image_url) && (
+              {/* ✅ NEW: Show all attachments */}
+              {selectedReport.attachments && selectedReport.attachments.length > 0 && (
                 <div className="slr-attachments">
                   <h3><MdAttachFile /> Attachments</h3>
                   <div className="slr-attachments-grid">
-                    {selectedReport.file_url && (
-                      <a
-                        href={selectedReport.file_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="slr-attachment-btn"
-                      >
-                        <MdAttachFile />
-                        <span>Document-1</span>
+                    {selectedReport.attachments.map((att, idx) => (
+                      <a key={idx} href={att.url} target="_blank" rel="noreferrer" 
+                        className={`slr-attachment-btn ${att.type === 'image' ? 'slr-attachment-btn--img' : ''}`}>
+                        {att.type === 'document' ? <MdAttachFile /> : <MdImage />}
+                        <span>{att.filename || `${att.type} ${idx + 1}`}</span>
                       </a>
-                    )}
-                    {selectedReport.image_url && (
-                      <a
-                        href={selectedReport.image_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="slr-attachment-btn slr-attachment-btn--img"
-                      >
-                        <MdImage />
-                        <span>Image-1</span>
-                      </a>
-                    )}
+                    ))}
                   </div>
                 </div>
               )}
 
               <div className="slr-modal-actions">
                 <button className="slr-modal-cancel" onClick={() => setSelectedReport(null)}><MdClose /> Close</button>
-                {selectedReport.file_url && (
-                  <a href={selectedReport.file_url} target="_blank" rel="noreferrer" className="slr-modal-download">
-                    <MdDownload /> Download Report
-                  </a>
-                )}
               </div>
             </div>
           </div>
@@ -426,13 +623,21 @@ const StaffLabReports = () => {
               {editError   && <div className="slr-edit-error"><MdClose /> {editError}</div>}
               {editSuccess && <div className="slr-edit-success"><MdCheckCircle /> {editSuccess}</div>}
 
+              {/* ✅ Warning for completed reports */}
+              {editForm.is_completed && (
+                <div style={{ padding: '12px 16px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <MdWarning size={20} style={{ color: '#f59e0b' }} />
+                  <span style={{ fontSize: '13px', color: '#92400e' }}>This report is marked as completed. Mark it as pending to make changes.</span>
+                </div>
+              )}
+
               {/* Patient & Doctor */}
               <div className="slr-edit-section">
                 <h3><MdPerson /> Patient & Doctor</h3>
                 <div className="slr-edit-grid-2">
                   <div className="slr-edit-field">
                     <label>Patient <span className="slr-req">*</span></label>
-                    <select value={editForm.patient_id || ''} onChange={onEditPatientChange}>
+                    <select value={editForm.patient_id || ''} onChange={onEditPatientChange} disabled={editForm.is_completed}>
                       <option value="">Select patient...</option>
                       {editPatients.map(p => (
                         <option key={p.id} value={p.id}>{p.name} • {p.patient_id}</option>
@@ -444,7 +649,7 @@ const StaffLabReports = () => {
                     <select
                       value={editForm.doctor_id || ''}
                       onChange={e => setEditForm(f => ({ ...f, doctor_id: e.target.value }))}
-                      disabled={loadingEditDoctors || !editForm.patient_id}
+                      disabled={loadingEditDoctors || !editForm.patient_id || editForm.is_completed}
                     >
                       <option value="">{loadingEditDoctors ? 'Loading...' : 'Select doctor...'}</option>
                       {editDoctors.map(d => (
@@ -455,46 +660,15 @@ const StaffLabReports = () => {
                 </div>
               </div>
 
-              {/* Test Info */}
+              {/* Test Date */}
               <div className="slr-edit-section">
                 <h3><FaFlask /> Test Information</h3>
-                <div className="slr-edit-grid-3">
-                  <div className="slr-edit-field">
-                    <label>Test Name <span className="slr-req">*</span></label>
-                    <input type="text" value={editForm.test_name || ''}
-                      onChange={e => setEditForm(f => ({ ...f, test_name: e.target.value }))} />
-                  </div>
+                <div className="slr-edit-grid-2">
                   <div className="slr-edit-field">
                     <label>Test Date <span className="slr-req">*</span></label>
                     <input type="date" value={editForm.test_date || ''}
-                      onChange={e => setEditForm(f => ({ ...f, test_date: e.target.value }))} />
-                  </div>
-                  <div className="slr-edit-field">
-                    <label>Category <span className="slr-req">*</span></label>
-                    <select value={editForm.category || ''}
-                      onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}>
-                      <option value="">Select...</option>
-                      {CATEGORIES.map(c => <option key={c} value={c.toLowerCase()}>{c}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status */}
-              <div className="slr-edit-section">
-                <h3><MdScience /> Report Status</h3>
-                <div className="slr-edit-grid-2">
-                  <div className="slr-edit-field">
-                    <label>Overall Result</label>
-                    <select
-                      value={editForm.overall_status || 'normal'}
-                      onChange={e => setEditForm(f => ({ ...f, overall_status: e.target.value }))}
-                      className={`slr-result-sel slr-result-sel--${editForm.overall_status}`}
-                    >
-                      <option value="normal">✅ Normal</option>
-                      <option value="abnormal">⚠️ Abnormal</option>
-                      <option value="critical">🚨 Critical</option>
-                    </select>
+                      onChange={e => setEditForm(f => ({ ...f, test_date: e.target.value }))} 
+                      disabled={editForm.is_completed} />
                   </div>
                   <div className="slr-edit-field">
                     <label>Completion Status</label>
@@ -509,102 +683,186 @@ const StaffLabReports = () => {
                 </div>
               </div>
 
-              {/* Parameters */}
-              <div className="slr-edit-section">
-                <div className="slr-edit-sec-head">
-                  <h3><FaNotesMedical /> Test Parameters</h3>
-                  <button type="button" className="slr-add-param" onClick={addEditParam}><MdAdd /> Add</button>
-                </div>
-                <div className="slr-params-head">
-                  <span>Name</span><span>Value</span><span>Unit</span><span>Range</span><span>Status</span><span></span>
-                </div>
-                {editParams.map(p => (
-                  <div key={p.id} className="slr-param-row">
-                    <input type="text" value={p.name}        onChange={e => updateEditParam(p.id,'name',e.target.value)}        placeholder="Hemoglobin" />
-                    <input type="text" value={p.value}       onChange={e => updateEditParam(p.id,'value',e.target.value)}       placeholder="14.5" />
-                    <input type="text" value={p.unit}        onChange={e => updateEditParam(p.id,'unit',e.target.value)}        placeholder="g/dL" />
-                    <input type="text" value={p.normalRange} onChange={e => updateEditParam(p.id,'normalRange',e.target.value)} placeholder="12–16" />
-                    <select value={p.status} onChange={e => updateEditParam(p.id,'status',e.target.value)}
-                      className={`slr-param-sel ${paramStatusClass(p.status)}`}>
-                      <option value="Normal">Normal</option>
-                      <option value="High">High</option>
-                      <option value="Low">Low</option>
-                      <option value="Critical">Critical</option>
-                    </select>
-                    <button type="button" className="slr-del-param" onClick={() => removeEditParam(p.id)} disabled={editParams.length===1}><MdDelete /></button>
+              {/* Test Sections */}
+              {editTestSections.map((section, sectionIndex) => (
+                <div key={section.id} className="slr-edit-section">
+                  <div className="slr-edit-sec-head">
+                    <h3><FaNotesMedical /> Test Section {sectionIndex + 1}</h3>
+                    {editTestSections.length > 1 && (
+                      <button type="button" className="slr-del-param" onClick={() => removeTestSection(section.id)} 
+                        style={{ width: 'auto', padding: '6px 12px' }} disabled={editForm.is_completed}>
+                        Remove Section
+                      </button>
+                    )}
                   </div>
-                ))}
+
+                  <div className="slr-edit-grid-3">
+                    <div className="slr-edit-field">
+                      <label>Test Name <span className="slr-req">*</span></label>
+                      <select value={section.test_name_choice} onChange={e => updateTestSection(section.id, 'test_name_choice', e.target.value)} disabled={editForm.is_completed}>
+                        <option value="">Select test...</option>
+                        {TEST_NAMES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+
+                    {section.test_name_choice === 'Other' && (
+                      <div className="slr-edit-field">
+                        <label>Custom Test Name <span className="slr-req">*</span></label>
+                        <input type="text" value={section.custom_test_name} onChange={e => updateTestSection(section.id, 'custom_test_name', e.target.value)} 
+                          placeholder="Enter custom test name" disabled={editForm.is_completed} />
+                      </div>
+                    )}
+
+                    <div className="slr-edit-field">
+                      <label>Category <span className="slr-req">*</span></label>
+                      <select value={section.category} onChange={e => updateTestSection(section.id, 'category', e.target.value)} disabled={editForm.is_completed}>
+                        <option value="">Select category...</option>
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="slr-edit-field">
+                      <label>Test Result <span className="slr-req">*</span></label>
+                      <select value={section.status} onChange={e => updateTestSection(section.id, 'status', e.target.value)} 
+                        className={`slr-result-sel slr-result-sel--${section.status.toLowerCase()}`} disabled={editForm.is_completed}>
+                        <option value="Normal">✅ Normal</option>
+                        <option value="Abnormal">⚠️ Abnormal</option>
+                        <option value="Critical">🚨 Critical</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Parameters for this section */}
+                  <div style={{ marginTop: '16px' }}>
+                    <div className="slr-edit-sec-head">
+                      <h4 style={{ fontSize: '13px', fontWeight: '700', color: '#374151' }}>Parameters</h4>
+                      <button type="button" className="slr-add-param" onClick={() => addParameter(section.id)} disabled={editForm.is_completed}>
+                        <MdAdd /> Add Parameter
+                      </button>
+                    </div>
+
+                    <div className="slr-params-head">
+                      <span>Name</span><span>Value</span><span>Unit</span><span>Range</span><span>Status</span><span></span>
+                    </div>
+
+                    {section.parameters.map(p => (
+                      <div key={p.id} className="slr-param-row">
+                        <input type="text" value={p.name} onChange={e => updateParameter(section.id, p.id, 'name', e.target.value)} 
+                          placeholder="Hemoglobin" disabled={editForm.is_completed} />
+                        <input type="text" value={p.value} onChange={e => updateParameter(section.id, p.id, 'value', e.target.value)} 
+                          placeholder="14.5" disabled={editForm.is_completed} />
+                        <input type="text" value={p.unit} onChange={e => updateParameter(section.id, p.id, 'unit', e.target.value)} 
+                          placeholder="g/dL" disabled={editForm.is_completed} />
+                        <input type="text" value={p.normalRange} onChange={e => updateParameter(section.id, p.id, 'normalRange', e.target.value)} 
+                          placeholder="12–16" disabled={editForm.is_completed} />
+                        <select value={p.status} onChange={e => updateParameter(section.id, p.id, 'status', e.target.value)} 
+                          className={`slr-param-sel ${paramStatusClass(p.status)}`} disabled={editForm.is_completed}>
+                          <option value="Normal">Normal</option>
+                          <option value="High">High</option>
+                          <option value="Low">Low</option>
+                          <option value="Critical">Critical</option>
+                        </select>
+                        <button type="button" className="slr-del-param" onClick={() => removeParameter(section.id, p.id)} 
+                          disabled={section.parameters.length === 1 || editForm.is_completed}><MdDelete /></button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Findings */}
+                  <div className="slr-edit-field" style={{ marginTop: '12px' }}>
+                    <label>Findings</label>
+                    <textarea rows={3} value={section.findings} onChange={e => updateTestSection(section.id, 'findings', e.target.value)} 
+                      placeholder="Enter findings for this test..." style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontFamily: 'inherit' }} 
+                      disabled={editForm.is_completed} />
+                  </div>
+                </div>
+              ))}
+
+              {/* Add Test Section Button */}
+              <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                <button type="button" className="slr-add-param" onClick={addTestSection} style={{ padding: '10px 20px' }} disabled={editForm.is_completed}>
+                  <MdAdd /> Add Another Test Section
+                </button>
               </div>
 
-              {/* File + Image Upload */}
+              {/* ✅ NEW: File & Image Upload with multiple support */}
               <div className="slr-edit-section">
                 <h3><MdAttachFile /> Files & Images</h3>
+                
+                {/* Existing Attachments */}
+                {existingAttachments.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <h4 style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '10px' }}>Existing Attachments:</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+                      {existingAttachments.map(att => (
+                        <div key={att.id} style={{ position: 'relative', padding: '12px', background: '#f9fafb', border: '1.5px solid #e5e7eb', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {att.type === 'document' ? <MdAttachFile size={20} style={{ color: '#6366f1' }} /> : <MdImage size={20} style={{ color: '#8b5cf6' }} />}
+                          <a href={att.url} target="_blank" rel="noreferrer" style={{ flex: 1, fontSize: '12px', color: '#374151', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {att.filename || `${att.type} file`}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAttachment(att.id)}
+                            disabled={deletingAttachment === att.id || editForm.is_completed}
+                            style={{ padding: '4px', background: 'transparent', border: 'none', cursor: editForm.is_completed ? 'not-allowed' : 'pointer', opacity: editForm.is_completed ? 0.5 : 1 }}
+                          >
+                            <MdClose size={16} style={{ color: '#ef4444' }} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* New File Uploads */}
                 <div className="slr-edit-grid-2">
-
-                  {/* PDF / DOC */}
                   <div className="slr-edit-field">
-                    <label>Report File (PDF / DOC)</label>
-                    {editReport.file_url && !editFile && (
-                      <p className="slr-existing-file">
-                        Current: <a href={editReport.file_url} target="_blank" rel="noreferrer">Download existing</a>
-                      </p>
-                    )}
-                    {editFile ? (
-                      <div className="slr-file-preview">
-                        <MdAttachFile className="slr-file-preview-icon" />
-                        <span className="slr-file-preview-name">{editFile.name}</span>
-                        <button type="button" className="slr-file-remove-btn" onClick={() => setEditFile(null)}>
-                          <MdClose />
-                        </button>
+                    <label>Add Documents (PDF / DOC)</label>
+                    {editFiles.length > 0 && (
+                      <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {editFiles.map((file, idx) => (
+                          <div key={idx} className="slr-file-preview">
+                            <MdAttachFile className="slr-file-preview-icon" />
+                            <span className="slr-file-preview-name">{file.name}</span>
+                            <button type="button" className="slr-file-remove-btn" onClick={() => removeNewFile(idx)}><MdClose /></button>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <label className="slr-file-zone">
-                        <input type="file" accept=".pdf,.doc,.docx" hidden
-                          onChange={e => setEditFile(e.target.files[0])} />
-                        <MdAttachFile />
-                        <span>Click to upload PDF / DOC</span>
-                      </label>
                     )}
+                    <label className={`slr-file-zone ${editForm.is_completed ? 'slr-file-zone--disabled' : ''}`}>
+                      <input type="file" accept=".pdf,.doc,.docx" multiple hidden onChange={handleFilesChange} disabled={editForm.is_completed} />
+                      <MdAttachFile /><span>{editForm.is_completed ? 'Cannot add files to completed report' : 'Click to upload PDF / DOC (multiple)'}</span>
+                    </label>
                   </div>
 
-                  {/* Image */}
                   <div className="slr-edit-field">
-                    <label>Report Image (JPG / PNG)</label>
-                    {editReport.image_url && !editImage && (
-                      <p className="slr-existing-file">
-                        Current: <a href={editReport.image_url} target="_blank" rel="noreferrer">View existing</a>
-                      </p>
-                    )}
-                    {editImage ? (
-                      <div className="slr-file-preview">
-                        <MdImage className="slr-file-preview-icon slr-file-preview-icon--img" />
-                        <span className="slr-file-preview-name">{editImage.name}</span>
-                        <button type="button" className="slr-file-remove-btn" onClick={() => setEditImage(null)}>
-                          <MdClose />
-                        </button>
+                    <label>Add Images (JPG / PNG)</label>
+                    {editImages.length > 0 && (
+                      <div style={{ marginBottom: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {editImages.map((image, idx) => (
+                          <div key={idx} className="slr-file-preview">
+                            <MdImage className="slr-file-preview-icon slr-file-preview-icon--img" />
+                            <span className="slr-file-preview-name">{image.name}</span>
+                            <button type="button" className="slr-file-remove-btn" onClick={() => removeNewImage(idx)}><MdClose /></button>
+                          </div>
+                        ))}
                       </div>
-                    ) : (
-                      <label className="slr-file-zone slr-file-zone--image">
-                        <input type="file" accept="image/*" hidden
-                          onChange={e => setEditImage(e.target.files[0])} />
-                        <MdImage />
-                        <span>Click to upload image</span>
-                      </label>
                     )}
+                    <label className={`slr-file-zone slr-file-zone--image ${editForm.is_completed ? 'slr-file-zone--disabled' : ''}`}>
+                      <input type="file" accept="image/*" multiple hidden onChange={handleImagesChange} disabled={editForm.is_completed} />
+                      <MdImage /><span>{editForm.is_completed ? 'Cannot add images to completed report' : 'Click to upload images (multiple)'}</span>
+                    </label>
                   </div>
-
                 </div>
               </div>
+
+              {/* Notes */}
               <div className="slr-edit-section slr-edit-section--last">
                 <h3><MdNotes /> Additional Notes</h3>
                 <div className="slr-edit-field slr-edit-field--full">
-                  <textarea
-                    rows={6}
-                    value={editForm.notes || ''}
-                    onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Enter any additional observations, remarks, or clinical notes about this lab report..."
-                    className="slr-notes-textarea"
-                  />
+                  <textarea rows={6} value={editForm.notes || ''} onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} 
+                    placeholder="Enter any additional observations, remarks, or clinical notes about this lab report..." 
+                    className="slr-notes-textarea" disabled={editForm.is_completed} />
                 </div>
               </div>
 

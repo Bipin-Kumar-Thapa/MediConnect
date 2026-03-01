@@ -513,75 +513,82 @@ const LabReports = () => {
               </div>
 
               {/* Parameters Table */}
-              {selectedReport.parameters && selectedReport.parameters.length > 0 && (
+              {selectedReport.test_sections && selectedReport.test_sections.length > 0 && (
                 <div className="details-section">
-                  <div className="section-header-small">
-                    <MdScience size={20} />
-                    <h3>Test Parameters</h3>
-                  </div>
-                  <div className="results-table">
-                    <div className="table-header">
-                      <span>Parameter</span>
-                      <span>Value</span>
-                      <span>Normal Range</span>
-                      <span>Status</span>
-                    </div>
-                    {selectedReport.parameters.map((param, index) => (
-                      <div key={index} className={`table-row param-${param.status.toLowerCase()}`}>
-                        <span className="param-name">{param.name}</span>
-                        <span className="param-value">{param.value} {param.unit}</span>
-                        <span className="param-range">{param.normalRange}</span>
-                        <span className="param-status">
-                          <span className={`param-badge param-${param.status.toLowerCase()}`}>
-                            {param.status}
-                          </span>
+                  {selectedReport.test_sections.map((section, sectionIdx) => (
+                    <div key={sectionIdx} style={{ marginBottom: '24px' }}>
+                      <div className="section-header-small">
+                        <MdScience size={20} />
+                        <h3>{section.test_name} - {section.category}</h3>
+                        <span className={`status-badge ${getStatusClass(section.status)}`} style={{ marginLeft: 'auto' }}>
+                          {getStatusIcon(section.status)}
+                          {section.status}
                         </span>
                       </div>
-                    ))}
-                  </div>
+
+                      {/* Findings for this test section */}
+                      {section.findings && (
+                        <div className="notes-box" style={{ marginBottom: '12px', fontSize: '13px', padding: '10px 14px' }}>
+                          <strong>Findings:</strong> {section.findings}
+                        </div>
+                      )}
+
+                      {/* Parameters Table */}
+                      {section.parameters && section.parameters.length > 0 && (
+                        <div className="results-table">
+                          <div className="table-header">
+                            <span>Parameter</span>
+                            <span>Value</span>
+                            <span>Normal Range</span>
+                            <span>Status</span>
+                          </div>
+                          {section.parameters.map((param, paramIdx) => (
+                            <div key={paramIdx} className={`table-row param-${param.status.toLowerCase()}`}>
+                              <span className="param-name">{param.name}</span>
+                              <span className="param-value">{param.value} {param.unit}</span>
+                              <span className="param-range">{param.normalRange}</span>
+                              <span className="param-status">
+                                <span className={`param-badge param-${param.status.toLowerCase()}`}>
+                                  {param.status}
+                                </span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
               {/* Uploaded Files */}
-              {selectedReport.uploadedFiles && selectedReport.uploadedFiles.length > 0 && (
+              {/* ✅ UPDATED: Show multiple attachments */}
+              {selectedReport.attachments && selectedReport.attachments.length > 0 && (
                 <div className="details-section">
                   <div className="section-header-small">
                     <MdLocalHospital size={20} />
                     <h3>Attached Files</h3>
                   </div>
                   <div className="files-grid">
-                    {selectedReport.uploadedFiles.map((file, index) => (
+                    {selectedReport.attachments.map((attachment, index) => (
                       <div key={index} className="file-item">
-                        {file.type === 'image' ? (
-                          <div className="file-preview-image" onClick={() => window.open(file.url, '_blank')}>
-                            <img src={file.url} alt={file.name} />
+                        {attachment.type === 'image' ? (
+                          <div className="file-preview-image" onClick={() => window.open(attachment.url, '_blank')}>
+                            <img src={attachment.url} alt={attachment.filename || 'Lab Report Image'} />
                             <div className="file-overlay">
                               <MdVisibility size={24} />
                               <span>Click to view</span>
                             </div>
                           </div>
                         ) : (
-                          <div className="file-preview-pdf" onClick={() => window.open(file.url, '_blank')}>
+                          <div className="file-preview-pdf" onClick={() => window.open(attachment.url, '_blank')}>
                             <div className="pdf-icon">📄</div>
-                            <span className="file-name">{file.name}</span>
+                            <span className="file-name">{attachment.filename || 'Lab Report Document'}</span>
                             <span className="file-type">PDF Document</span>
                           </div>
                         )}
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Findings */}
-              {selectedReport.findings && (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <MdInfo size={20} />
-                    <h3>Findings</h3>
-                  </div>
-                  <div className="notes-box">
-                    {selectedReport.findings}
                   </div>
                 </div>
               )}

@@ -95,7 +95,6 @@ const RescheduleModal = ({ appointment, onClose, onSuccess }) => {
 
   // NEW: Fetch available dates for selected transfer doctor
   const fetchDoctorAvailableDates = async () => {
-    console.log('🔍 Fetching dates for doctor:', selectedDoctor?.id); // ✅ ADD
     setLoadingDoctorSlots(true);
     try {
       const response = await fetch(
@@ -105,19 +104,13 @@ const RescheduleModal = ({ appointment, onClose, onSuccess }) => {
         }
       );
 
-      console.log('📡 Response status:', response.status); // ✅ ADD
-
       if (response.ok) {
         const data = await response.json();
-        console.log('📦 Received data:', data); // ✅ ADD
-        console.log('📅 Available dates:', data.available_dates); // ✅ ADD
         setDoctorAvailableDates(data.available_dates || []);
       } else {
-        console.log('❌ Response not OK'); // ✅ ADD
         setDoctorAvailableDates([]);
       }
     } catch (error) {
-      console.error('💥 Error fetching available dates:', error); // ✅ ADD
       setDoctorAvailableDates([]);
     } finally {
       setLoadingDoctorSlots(false);

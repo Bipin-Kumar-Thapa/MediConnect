@@ -240,11 +240,11 @@ def doctor_overview(request):
             'priority': 'medium'
         })
     
-    # Type 3: Critical lab reports (last 1 hour)
+    # ✅ Type 3: Critical lab reports (last 1 hour) - FIXED
     doctor_patients = Appointment.objects.filter(doctor=profile).values_list('patient_id', flat=True).distinct()
     critical_lab_reports = LabReport.objects.filter(
-        patient_id__in=doctor_patients, created_at__gte=one_hour_ago, status='critical'
-    ).select_related('patient__user').order_by('-created_at')[:5]
+        patient_id__in=doctor_patients, created_at__gte=one_hour_ago, overall_status='critical'
+    ).select_related('patient__user').prefetch_related('test_sections').order_by('-created_at')[:5]
     
     for report in critical_lab_reports:
         time_since = now - report.created_at
@@ -258,18 +258,29 @@ def doctor_overview(request):
             time_text = f"{hours_ago} hr ago" if hours_ago > 1 else "1 hr ago"
         else:
             time_text = "Yesterday"
+        
+        # ✅ Get test name from test_sections
+        test_sections = report.test_sections.all()
+        if test_sections.exists():
+            if test_sections.count() == 1:
+                test_name = test_sections.first().get_test_name()
+            else:
+                test_name = f"{test_sections.count()} tests"
+        else:
+            test_name = "lab report"
+        
         notifications.append({
             'id': f'lab-critical-{report.id}',
             'type': 'lab',
-            'message': f"⚠️ Critical Lab: {report.patient.user.get_full_name() or report.patient.user.username} - {report.test_name}",
+            'message': f"⚠️ Critical Lab: {report.patient.user.get_full_name() or report.patient.user.username} - {test_name}",
             'time': time_text,
             'priority': 'high'
         })
     
-    # Type 4: New lab reports (last 1 hour, non-critical)
+    # ✅ Type 4: New lab reports (last 1 hour, non-critical) - FIXED
     new_lab_reports = LabReport.objects.filter(
-        patient_id__in=doctor_patients, created_at__gte=one_hour_ago, status__in=['normal', 'abnormal']
-    ).select_related('patient__user').order_by('-created_at')[:3]
+        patient_id__in=doctor_patients, created_at__gte=one_hour_ago, overall_status__in=['normal', 'abnormal']
+    ).select_related('patient__user').prefetch_related('test_sections').order_by('-created_at')[:3]
     
     for report in new_lab_reports:
         time_since = now - report.created_at
@@ -283,10 +294,21 @@ def doctor_overview(request):
             time_text = f"{hours_ago} hr ago" if hours_ago > 1 else "1 hr ago"
         else:
             time_text = "Yesterday"
+        
+        # ✅ Get test name from test_sections
+        test_sections = report.test_sections.all()
+        if test_sections.exists():
+            if test_sections.count() == 1:
+                test_name = test_sections.first().get_test_name()
+            else:
+                test_name = f"{test_sections.count()} tests"
+        else:
+            test_name = "lab report"
+        
         notifications.append({
             'id': f'lab-new-{report.id}',
             'type': 'lab',
-            'message': f"New Lab Result: {report.patient.user.get_full_name() or report.patient.user.username} - {report.test_name}",
+            'message': f"New Lab Result: {report.patient.user.get_full_name() or report.patient.user.username} - {test_name}",
             'time': time_text,
             'priority': 'medium'
         })
@@ -680,20 +702,31 @@ def get_doctor_lab_reports(request):
     search_query = request.GET.get('search', '').strip()
     
     patient_ids = Appointment.objects.filter(doctor=profile).values_list('patient_id', flat=True).distinct()
-    lab_reports = LabReport.objects.filter(patient_id__in=patient_ids).select_related('patient__user', 'uploaded_by')
+    lab_reports = LabReport.objects.filter(
+        patient_id__in=patient_ids
+    ).select_related(
+        'patient__user', 'uploaded_by'
+    ).prefetch_related('test_sections__parameters', 'attachments')
     
+    # ✅ NEW: Category filter
     if category_filter != 'all':
-        lab_reports = lab_reports.filter(category=category_filter)
+        lab_reports = lab_reports.filter(
+            test_sections__category=category_filter
+        ).distinct()
+    
+    # Status filter
     if status_filter != 'all':
-        lab_reports = lab_reports.filter(status=status_filter)
+        lab_reports = lab_reports.filter(overall_status=status_filter)
+    
+    # Search query
     if search_query:
         lab_reports = lab_reports.filter(
             Q(report_number__icontains=search_query) |
             Q(patient__user__first_name__icontains=search_query) |
             Q(patient__user__last_name__icontains=search_query) |
             Q(patient__patient_id__icontains=search_query) |
-            Q(test_name__icontains=search_query)
-        )
+            Q(test_sections__test_name_choice__icontains=search_query)
+        ).distinct()
     
     reports_list = []
     for report in lab_reports:
@@ -701,32 +734,157 @@ def get_doctor_lab_reports(request):
         if report.uploaded_by:
             uploader_name = f"Lab Staff - {report.uploaded_by.user.get_full_name() or report.uploaded_by.user.username}"
         has_file = bool(report.report_file)
+        
+        # Get test names and categories from test_sections
+        test_sections = report.test_sections.all()
+        if test_sections.exists():
+            if test_sections.count() == 1:
+                section = test_sections.first()
+                test_name = section.get_test_name()
+                category = section.get_category_display_name()
+            else:
+                test_name = f"{test_sections.count()} Tests"
+                categories = list(set([s.get_category_display_name() for s in test_sections]))
+                category = ', '.join(categories) if len(categories) <= 2 else 'Multiple'
+        else:
+            test_name = "Lab Report"
+            category = "General"
+
+        attachments_data = []
+        for attachment in report.attachments.all():
+            attachments_data.append({
+                'id': attachment.id,
+                'type': attachment.attachment_type,
+                'url': request.build_absolute_uri(attachment.file.url) if attachment.file else None,
+                'filename': attachment.file.name.split('/')[-1] if attachment.file else None,
+            })
+        
         reports_list.append({
             'id': report.id,
             'reportNumber': report.report_number,
             'patientName': report.patient.user.get_full_name() or report.patient.user.username,
             'patientId': report.patient.patient_id,
-            'testName': report.test_name,
-            'category': report.get_category_display_name(),
+            'testName': test_name,
+            'category': category,
             'date': report.test_date.isoformat(),
             'uploadedBy': uploader_name,
             'uploadedDate': report.created_at.strftime('%B %d, %Y'),
-            'status': report.status,
-            'findings': report.findings or '',
+            'status': report.overall_status,
+            'findings': report.notes or '',
             'notes': report.notes or '',
-            'hasFile': has_file,
+            'hasFile': has_file or bool(attachments_data),
             'fileUrl': request.build_absolute_uri(report.report_file.url) if has_file else None,
+            'attachments': attachments_data,
         })
     
     return JsonResponse({
         'reports': reports_list,
         'stats': {
             'total': LabReport.objects.filter(patient_id__in=patient_ids).count(),
-            'normal': LabReport.objects.filter(patient_id__in=patient_ids, status='normal').count(),
-            'abnormal': LabReport.objects.filter(patient_id__in=patient_ids, status='abnormal').count(),
-            'critical': LabReport.objects.filter(patient_id__in=patient_ids, status='critical').count(),
+            'normal': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='normal').count(),
+            'abnormal': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='abnormal').count(),
+            'critical': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='critical').count(),
         }
     })
+
+
+
+@login_required
+def get_doctor_lab_report_details(request, report_id):
+    """
+    Get full lab report details with test sections and parameters
+    """
+    try:
+        profile = request.user.doctorprofile
+    except DoctorProfile.DoesNotExist:
+        return JsonResponse({"error": "Doctor profile not found"}, status=404)
+    
+    from staff.models import LabReport
+    
+    # Get patient IDs this doctor has access to
+    patient_ids = Appointment.objects.filter(doctor=profile).values_list('patient_id', flat=True).distinct()
+    
+    try:
+        report = LabReport.objects.select_related(
+            'patient__user', 'uploaded_by'
+        ).prefetch_related('test_sections__parameters').get(
+            id=report_id,
+            patient_id__in=patient_ids
+        )
+    except LabReport.DoesNotExist:
+        return JsonResponse({"error": "Lab report not found"}, status=404)
+    
+    uploader_name = 'Lab Staff'
+    if report.uploaded_by:
+        uploader_name = f"Lab Staff - {report.uploaded_by.user.get_full_name() or report.uploaded_by.user.username}"
+    
+    # Get test sections with parameters
+    test_sections_data = []
+    for section in report.test_sections.all():
+        parameters = []
+        for param in section.parameters.all():
+            parameters.append({
+                'name': param.name,
+                'value': param.value,
+                'unit': param.unit or '',
+                'normalRange': param.normal_range or '-',
+                'status': param.status
+            })
+        
+        test_sections_data.append({
+            'test_name': section.get_test_name(),
+            'category': section.get_category_display_name(),
+            'status': section.status,
+            'findings': section.findings or '',
+            'parameters': parameters,
+        })
+    
+    # Get test names and categories
+    test_sections = report.test_sections.all()
+    if test_sections.exists():
+        if test_sections.count() == 1:
+            section = test_sections.first()
+            test_name = section.get_test_name()
+            category = section.get_category_display_name()
+        else:
+            test_name = f"{test_sections.count()} Tests"
+            categories = list(set([s.get_category_display_name() for s in test_sections]))
+            category = ', '.join(categories) if len(categories) <= 2 else 'Multiple'
+    else:
+        test_name = "Lab Report"
+        category = "General"
+    
+
+    attachments_data = []
+    for attachment in report.attachments.all():
+        attachments_data.append({
+            'id': attachment.id,
+            'type': attachment.attachment_type,
+            'url': request.build_absolute_uri(attachment.file.url) if attachment.file else None,
+            'filename': attachment.file.name.split('/')[-1] if attachment.file else None,
+        })
+    
+    # Build response
+    report_data = {
+        'id': report.id,
+        'reportNumber': report.report_number,
+        'patientName': report.patient.user.get_full_name() or report.patient.user.username,
+        'patientId': report.patient.patient_id,
+        'testName': test_name,
+        'category': category,
+        'date': report.test_date.isoformat(),
+        'uploadedBy': uploader_name,
+        'uploadedDate': report.created_at.strftime('%B %d, %Y'),
+        'status': report.overall_status,
+        'notes': report.notes or '',
+        'hasFile': bool(report.report_file) or bool(attachments_data),
+        'fileUrl': request.build_absolute_uri(report.report_file.url) if report.report_file else None,
+        'imageUrl': request.build_absolute_uri(report.report_image.url) if report.report_image else None,
+        'attachments': attachments_data,
+        'test_sections': test_sections_data,
+    }
+    
+    return JsonResponse(report_data)
 
 
 @login_required

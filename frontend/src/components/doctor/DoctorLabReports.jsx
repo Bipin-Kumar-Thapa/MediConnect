@@ -6,11 +6,12 @@ import {
   MdSearch,
   MdClose,
   MdInfo,
-  MdDownload,
   MdVisibility,
   MdCheckCircle,
   MdWarning,
-  MdError
+  MdError,
+  MdAttachFile,
+  MdImage
 } from 'react-icons/md';
 import { FaFlask } from 'react-icons/fa';
 import '../../styles/doctor/DoctorLabReports.css';
@@ -26,16 +27,15 @@ const DoctorLabReports = () => {
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
 
-  // Fetch lab reports on component mount
   useEffect(() => {
     fetchLabReports();
   }, []);
 
-  // Fetch when filters change
   useEffect(() => {
     fetchLabReports();
   }, [filterCategory, filterStatus, searchQuery]);
@@ -74,21 +74,36 @@ const DoctorLabReports = () => {
     }
   };
 
-  const handleViewDetails = (report) => {
-    setSelectedReport(report);
+  const handleViewDetails = async (report) => {
     setShowDetailsModal(true);
-  };
+    setLoadingDetails(true);
+    setSelectedReport(null);
 
-  const handleDownload = (report) => {
-    if (report.fileUrl) {
-      window.open(report.fileUrl, '_blank');
-    } else {
-      alert('No file available for download');
+    try {
+      const response = await fetch(
+        `http://localhost:8000/doctor/lab-reports/${report.id}/details/`,
+        { credentials: 'include' }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedReport(data);
+      } else {
+        console.error('Failed to fetch report details');
+        alert('Failed to load report details');
+        setShowDetailsModal(false);
+      }
+    } catch (error) {
+      console.error('Error fetching report details:', error);
+      alert('Error loading report details');
+      setShowDetailsModal(false);
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
   const getStatusIcon = (status) => {
-    switch(status) {
+    switch(status?.toLowerCase()) {
       case 'normal':
         return <MdCheckCircle />;
       case 'abnormal':
@@ -101,7 +116,7 @@ const DoctorLabReports = () => {
   };
 
   const getStatusClass = (status) => {
-    return `status-${status}`;
+    return `status-${status?.toLowerCase() || 'normal'}`;
   };
 
   const statsArray = [
@@ -117,7 +132,6 @@ const DoctorLabReports = () => {
 
   return (
     <div className="doctor-lab-reports-page">
-      {/* Page Header */}
       <div className="page-header">
         <div className="header-content">
           <h1>Lab Reports</h1>
@@ -125,7 +139,6 @@ const DoctorLabReports = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="stats-grid">
         {statsArray.map((stat, index) => (
           <div key={index} className="stat-card" style={{ borderLeftColor: stat.color }}>
@@ -135,7 +148,6 @@ const DoctorLabReports = () => {
         ))}
       </div>
 
-      {/* Filters and Search */}
       <div className="filters-section">
         <div className="search-box">
           <MdSearch size={20} />
@@ -174,7 +186,6 @@ const DoctorLabReports = () => {
         </div>
       </div>
 
-      {/* Lab Reports Grid */}
       <div className="lab-reports-grid">
         {labReports.length === 0 ? (
           <div className="no-reports">
@@ -195,7 +206,7 @@ const DoctorLabReports = () => {
                   <FaFlask size={16} />
                   {report.reportNumber}
                 </div>
-                <span className={`category-badge ${report.category.toLowerCase()}`}>
+                <span className={`category-badge ${report.category.toLowerCase().replace(/\s+/g, '-')}`}>
                   {report.category}
                 </span>
               </div>
@@ -245,22 +256,13 @@ const DoctorLabReports = () => {
                   <MdVisibility size={18} />
                   View Report
                 </button>
-                {report.hasFile && (
-                  <button 
-                    className="btn-download-lab"
-                    onClick={() => handleDownload(report)}
-                  >
-                    <MdDownload size={18} />
-                  </button>
-                )}
               </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Details Modal */}
-      {showDetailsModal && selectedReport && (
+      {showDetailsModal && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content details-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -271,110 +273,186 @@ const DoctorLabReports = () => {
             </div>
 
             <div className="details-body">
-              {/* Report Info */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <FaFlask size={20} />
-                  <h3>Report Information</h3>
+              {loadingDetails ? (
+                <div className="loading-spinner" style={{ padding: '40px', textAlign: 'center' }}>
+                  <div className="spinner"></div>
+                  <p>Loading report details...</p>
                 </div>
-                <div className="detail-row">
-                  <span className="detail-label">Report Number:</span>
-                  <span className="detail-value">{selectedReport.reportNumber}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Test Name:</span>
-                  <span className="detail-value">{selectedReport.testName}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Category:</span>
-                  <span className={`category-badge ${selectedReport.category.toLowerCase()}`}>
-                    {selectedReport.category}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Test Date:</span>
-                  <span className="detail-value">
-                    {new Date(selectedReport.date).toLocaleDateString('en-US', { 
-                      month: 'long', 
-                      day: 'numeric',
-                      year: 'numeric'
-                    })}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Status:</span>
-                  <span className={`status-badge-lab ${getStatusClass(selectedReport.status)}`}>
-                    {getStatusIcon(selectedReport.status)}
-                    {selectedReport.status}
-                  </span>
-                </div>
-              </div>
+              ) : selectedReport ? (
+                <>
+                  <div className="details-section">
+                    <div className="section-header-small">
+                      <FaFlask size={20} />
+                      <h3>Report Information</h3>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Report Number:</span>
+                      <span className="detail-value">{selectedReport.reportNumber}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Test Name:</span>
+                      <span className="detail-value">{selectedReport.testName}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Category:</span>
+                      <span className={`category-badge ${selectedReport.category?.toLowerCase().replace(/\s+/g, '-')}`}>
+                        {selectedReport.category}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Test Date:</span>
+                      <span className="detail-value">
+                        {new Date(selectedReport.date).toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Overall Status:</span>
+                      <span className={`status-badge-lab ${getStatusClass(selectedReport.status)}`}>
+                        {getStatusIcon(selectedReport.status)}
+                        {selectedReport.status}
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Patient Info */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <MdPerson size={20} />
-                  <h3>Patient Information</h3>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Name:</span>
-                  <span className="detail-value">{selectedReport.patientName}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Patient ID:</span>
-                  <span className="detail-value">{selectedReport.patientId}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Uploaded By:</span>
-                  <span className="detail-value">{selectedReport.uploadedBy}</span>
-                </div>
-              </div>
+                  <div className="details-section">
+                    <div className="section-header-small">
+                      <MdPerson size={20} />
+                      <h3>Patient Information</h3>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Name:</span>
+                      <span className="detail-value">{selectedReport.patientName}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Patient ID:</span>
+                      <span className="detail-value">{selectedReport.patientId}</span>
+                    </div>
+                    <div className="detail-row">
+                      <span className="detail-label">Uploaded By:</span>
+                      <span className="detail-value">{selectedReport.uploadedBy}</span>
+                    </div>
+                  </div>
 
-              {/* Findings */}
-              {selectedReport.findings ? (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <MdScience size={20} />
-                    <h3>Findings</h3>
-                  </div>
-                  <div className="findings-box">
-                    {selectedReport.findings}
-                  </div>
-                </div>
-              ) : (
-                <div className="details-section">
-                  <div className="pending-message">
-                    <MdInfo size={24} />
-                    <p>Test results are being processed. Please check back later.</p>
-                  </div>
-                </div>
-              )}
+                  {selectedReport.test_sections && selectedReport.test_sections.length > 0 && (
+                    <div className="details-section">
+                      <div className="section-header-small">
+                        <MdScience size={20} />
+                        <h3>Test Results</h3>
+                      </div>
+                      {selectedReport.test_sections.map((section, idx) => (
+                        <div key={idx} style={{ marginBottom: '20px', padding: '16px', background: '#f8fafc', borderRadius: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
+                              {section.test_name} • {section.category}
+                            </h4>
+                            <span className={`status-badge-lab ${getStatusClass(section.status)}`}>
+                              {getStatusIcon(section.status)}
+                              {section.status}
+                            </span>
+                          </div>
+                          
+                          {section.findings && (
+                            <div className="findings-box" style={{ marginBottom: '12px', fontSize: '13px', padding: '10px', background: '#e0f2fe', borderRadius: '6px' }}>
+                              <strong>Findings:</strong> {section.findings}
+                            </div>
+                          )}
 
-              {/* Notes */}
-              {selectedReport.notes && (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <MdInfo size={20} />
-                    <h3>Notes & Observations</h3>
-                  </div>
-                  <div className={`notes-box ${selectedReport.status === 'critical' ? 'critical-notes' : ''}`}>
-                    {selectedReport.notes}
-                  </div>
-                </div>
-              )}
+                          {section.parameters && section.parameters.length > 0 && (
+                            <div className="results-table" style={{ marginTop: '12px' }}>
+                              <div className="table-header">
+                                <span>Parameter</span>
+                                <span>Value</span>
+                                <span>Normal Range</span>
+                                <span>Status</span>
+                              </div>
+                              {section.parameters.map((param, pIdx) => (
+                                <div key={pIdx} className={`table-row param-${param.status?.toLowerCase() || 'normal'}`}>
+                                  <span className="param-name">{param.name}</span>
+                                  <span className="param-value">{param.value} {param.unit}</span>
+                                  <span className="param-range">{param.normalRange}</span>
+                                  <span className="param-status">
+                                    <span className={`param-badge param-${param.status?.toLowerCase() || 'normal'}`}>
+                                      {param.status}
+                                    </span>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-              {/* Actions */}
-              {selectedReport.hasFile && (
-                <div className="details-actions">
-                  <button 
-                    className="btn-download-full"
-                    onClick={() => handleDownload(selectedReport)}
-                  >
-                    <MdDownload size={18} />
-                    Download Report
-                  </button>
-                </div>
-              )}
+                  {/* ✅ UPDATED: Show attachments array */}
+                  {selectedReport.attachments && selectedReport.attachments.length > 0 && (
+                    <div className="details-section">
+                      <div className="section-header-small">
+                        <MdAttachFile size={20} />
+                        <h3>Attached Files</h3>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {selectedReport.attachments.map((attachment, idx) => (
+                          <a
+                            key={idx}
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px',
+                              padding: '16px 20px',
+                              background: '#fff',
+                              border: '2px solid #e5e7eb',
+                              borderRadius: '12px',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s',
+                              textDecoration: 'none',
+                              color: 'inherit',
+                              minWidth: '140px'
+                            }}
+                          >
+                            {attachment.type === 'document' ? (
+                              <>
+                                <MdAttachFile size={32} style={{ color: '#6366f1' }} />
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
+                                  {attachment.filename || 'Document'}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <MdImage size={32} style={{ color: '#8b5cf6' }} />
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>
+                                  {attachment.filename || 'Image'}
+                                </span>
+                              </>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedReport.notes && (
+                    <div className="details-section">
+                      <div className="section-header-small">
+                        <MdInfo size={20} />
+                        <h3>Notes & Observations</h3>
+                      </div>
+                      <div className={`notes-box ${selectedReport.status === 'critical' ? 'critical-notes' : ''}`}>
+                        {selectedReport.notes}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : null}
             </div>
           </div>
         </div>
