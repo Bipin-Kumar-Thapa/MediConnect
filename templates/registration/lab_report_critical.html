@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URGENT: Critical Lab Report</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 40px 20px;">
+        <tr>
+            <td align="center">
+                <!-- Main Container -->
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="background-color: #ffffff; border-radius: 16px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden; border: 3px solid #ef4444;">
+                    
+                    <!-- Header (Red) -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 40px 30px; text-align: center;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">🚨</div>
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700;">URGENT: Critical Lab Report</h1>
+                            <p style="color: #fecaca; margin: 8px 0 0 0; font-size: 16px;">Immediate Attention Required</p>
+                        </td>
+                    </tr>
+                    
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <p style="color: #1f2937; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                                Hello <strong>{{ patient_name }}</strong>,
+                            </p>
+                            
+                            <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+                                Your lab report is now available and shows <strong style="color: #ef4444;">critical results</strong> that require immediate medical attention.
+                            </p>
+                            
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; margin: 0 0 24px 0;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <p style="color: #991b1b; font-size: 15px; font-weight: 700; margin: 0 0 8px 0;">
+                                            🚨 URGENT ACTION REQUIRED
+                                        </p>
+                                        <p style="color: #7f1d1d; font-size: 14px; line-height: 1.6; margin: 0;">
+                                            Please contact your doctor <strong>immediately</strong> or visit the hospital if you experience any concerning symptoms. Do not delay seeking medical advice.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- Report Details Card -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #fef2f2; border-radius: 12px; border: 2px solid #fca5a5; margin-bottom: 24px;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                            <tr>
+                                                <td style="color: #991b1b; font-size: 13px; font-weight: 600; padding-bottom: 8px;">REPORT DETAILS</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0;">
+                                                    <span style="color: #6b7280; font-size: 14px;">Report Number:</span>
+                                                    <strong style="color: #1f2937; font-size: 14px; float: right;">{{ report_number }}</strong>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0;">
+                                                    <span style="color: #6b7280; font-size: 14px;">Test Name:</span>
+                                                    <strong style="color: #1f2937; font-size: 14px; float: right;">{{ test_name }}</strong>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td style="padding: 6px 0;">
+                                                    <span style="color: #6b7280; font-size: 14px;">Test Date:</span>
+                                                    <strong style="color: #1f2937; font-size: 14px; float: right;">{{ test_date }}</strong>
+                                                </td>
+                                            </tr>
+                                            {% if doctor_name %}
+                                            <tr>
+                                                <td style="padding: 6px 0;">
+                                                    <span style="color: #6b7280; font-size: 14px;">Doctor:</span>
+                                                    <strong style="color: #1f2937; font-size: 14px; float: right;">{{ doctor_name }}</strong>
+                                                </td>
+                                            </tr>
+                                            {% endif %}
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <!-- CTA Button -->
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                                <tr>
+                                    <td align="center" style="padding: 10px 0 30px 0;">
+                                        <a href="{{ report_url }}" style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 10px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);">
+                                            View Full Report
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-top: 1px solid #e5e7eb; padding-top: 20px;">
+                                <tr>
+                                    <td style="padding: 12px 16px; background-color: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 6px;">
+                                        <p style="color: #92400e; font-size: 14px; line-height: 1.5; margin: 0;">
+                                            <strong>Emergency Contact:</strong> If you are experiencing a medical emergency, call emergency services (911) immediately or go to the nearest emergency room.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 24px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                            <p style="color: #6b7280; font-size: 13px; margin: 0 0 8px 0;">
+                                <strong>{{ hospital_name }}</strong>
+                            </p>
+                            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
+                                This is an urgent notification regarding your health. Please take immediate action.
+                            </p>
+                        </td>
+                    </tr>
+                    
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

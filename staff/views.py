@@ -9,6 +9,7 @@ from patients.models import PatientProfile
 from doctors.models import DoctorProfile
 import json as _json
 from datetime import datetime
+from .email_notifications import send_lab_report_email
 
 
 # ─────────────────────────────────────────────
@@ -360,6 +361,10 @@ def upload_lab_report(request):
         # Calculate and update overall status
         report.update_overall_status()
 
+        #Send email if report is completed
+        if report.is_completed:
+            send_lab_report_email(report)
+
         return JsonResponse({
             "success": True,
             "message": "Lab report uploaded successfully",
@@ -570,7 +575,7 @@ def edit_lab_report(request, report_id):
             new_files = []
             new_images = []
 
-        # ✅ NEW: Check if report is completed (only allow toggling completion status)
+        # Check if report is completed (only allow toggling completion status)
         was_completed = report.is_completed
         if was_completed and not is_completed:
             # Allow marking as pending
@@ -675,6 +680,10 @@ def edit_lab_report(request, report_id):
 
         # Calculate and update overall status
         report.update_overall_status()
+
+        # (Don't send duplicate if already was completed)
+        if report.is_completed and not was_completed:
+            send_lab_report_email(report)
 
         return JsonResponse({
             "success": True,

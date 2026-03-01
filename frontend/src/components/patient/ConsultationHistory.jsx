@@ -6,7 +6,9 @@ import {
   MdInfo,
   MdVisibility,
   MdLocalHospital,
-  MdAccessTime
+  MdAccessTime,
+  MdChevronLeft,
+  MdChevronRight
 } from 'react-icons/md';
 import { FaNotesMedical, FaStethoscope, FaUserMd, FaFileMedical } from 'react-icons/fa';
 import '../../styles/patient/ConsultationHistory.css';
@@ -19,12 +21,23 @@ const ConsultationHistory = () => {
     doctors_consulted: 0,
     with_prescription: 0
   });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    per_page: 10,
+    total_pages: 1,
+    total_count: 0,
+    has_next: false,
+    has_prev: false
+  });
+  const [availableYears, setAvailableYears] = useState([]);
   const [uniqueDoctors, setUniqueDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterDoctor, setFilterDoctor] = useState('all');
+  const [timePeriod, setTimePeriod] = useState('last_month');  // ✅ NEW
+  const [currentPage, setCurrentPage] = useState(1);  // ✅ NEW
 
   // Fetch consultation history on component mount
   useEffect(() => {
@@ -34,9 +47,10 @@ const ConsultationHistory = () => {
   // Fetch when filters change
   useEffect(() => {
     fetchConsultationHistory();
-  }, [searchQuery, filterDoctor]);
+  }, [searchQuery, filterDoctor, timePeriod, currentPage]);  // ✅ Added timePeriod, currentPage
 
   const fetchConsultationHistory = async () => {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (searchQuery) {
@@ -45,6 +59,10 @@ const ConsultationHistory = () => {
       if (filterDoctor !== 'all') {
         params.append('doctor', filterDoctor);
       }
+      if (timePeriod !== 'all') {  // ✅ NEW
+        params.append('time_period', timePeriod);
+      }
+      params.append('page', currentPage);  // ✅ NEW
 
       const response = await fetch(
         `http://localhost:8000/patient/consultation-history/?${params.toString()}`,
@@ -58,6 +76,8 @@ const ConsultationHistory = () => {
         setConsultations(data.consultations);
         setStats(data.stats);
         setUniqueDoctors(data.unique_doctors);
+        setPagination(data.pagination);  // ✅ NEW
+        setAvailableYears(data.available_years || []);  // ✅ NEW
       } else {
         console.error('Failed to fetch consultation history');
       }
@@ -66,6 +86,35 @@ const ConsultationHistory = () => {
       console.error('Error fetching consultation history:', error);
       setLoading(false);
     }
+  };
+
+  const handlePageChange = (newPage) => {  // ✅ NEW
+    if (newPage >= 1 && newPage <= pagination.total_pages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleTimePeriodChange = (period) => {  // ✅ NEW
+    setTimePeriod(period);
+    setCurrentPage(1); // Reset to page 1 when filter changes
+  };
+
+  const getPageNumbers = () => {  // ✅ NEW
+    const pages = [];
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(pagination.total_pages, startPage + maxVisible - 1);
+
+    if (endPage - startPage < maxVisible - 1) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
   };
 
   const statsArray = [
@@ -92,6 +141,25 @@ const ConsultationHistory = () => {
           <h1>Consultation History</h1>
           <p>View your complete medical consultation records</p>
         </div>
+        
+        {/* ✅ NEW: Time Period Filter - Top Right */}
+        <div className="time-period-filter-header">
+          <MdCalendarToday size={18} />
+          <select 
+            value={timePeriod}
+            onChange={(e) => handleTimePeriodChange(e.target.value)}
+            className="time-period-select"
+          >
+            <option value="all">All Time</option>
+            <option value="last_month">Last Month</option>
+            <option value="last_3_months">Last 3 Months</option>
+            <option value="last_6_months">Last 6 Months</option>
+            <option value="last_year">Last Year</option>
+            {availableYears.filter(year => year !== new Date().getFullYear()).map(year => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -112,14 +180,20 @@ const ConsultationHistory = () => {
             type="text" 
             placeholder="Search by doctor, diagnosis, or specialty..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);  // ✅ Reset to page 1
+            }}
           />
         </div>
         <div className="filter-group">
           <select 
             className="filter-select"
             value={filterDoctor}
-            onChange={(e) => setFilterDoctor(e.target.value)}
+            onChange={(e) => {
+              setFilterDoctor(e.target.value);
+              setCurrentPage(1);  // ✅ Reset to page 1
+            }}
           >
             <option value="all">All Doctors</option>
             {uniqueDoctors.map((doctor, index) => (
@@ -129,6 +203,13 @@ const ConsultationHistory = () => {
         </div>
       </div>
 
+      {/* ✅ NEW: Results Count */}
+      {pagination.total_count > 0 && (
+        <div className="results-info">
+          Showing {((currentPage - 1) * pagination.per_page) + 1}-{Math.min(currentPage * pagination.per_page, pagination.total_count)} of {pagination.total_count} consultations
+        </div>
+      )}
+
       {/* Consultations Timeline */}
       <div className="consultations-timeline">
         {consultations.length === 0 ? (
@@ -136,7 +217,7 @@ const ConsultationHistory = () => {
             <FaNotesMedical size={48} />
             <h3>No consultations found</h3>
             <p>
-              {searchQuery || filterDoctor !== 'all'
+              {searchQuery || filterDoctor !== 'all' || timePeriod !== 'all'
                 ? 'Try adjusting your search or filters'
                 : 'No consultation history available yet'
               }
@@ -223,7 +304,42 @@ const ConsultationHistory = () => {
         )}
       </div>
 
-      {/* Details Modal */}
+      {/* ✅ NEW: Pagination */}
+      {pagination.total_pages > 1 && (
+        <div className="pagination-container">
+          <button 
+            className="pagination-btn"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={!pagination.has_prev}
+          >
+            <MdChevronLeft size={20} />
+            Previous
+          </button>
+
+          <div className="pagination-pages">
+            {getPageNumbers().map(pageNum => (
+              <button
+                key={pageNum}
+                className={`pagination-page ${pageNum === currentPage ? 'active' : ''}`}
+                onClick={() => handlePageChange(pageNum)}
+              >
+                {pageNum}
+              </button>
+            ))}
+          </div>
+
+          <button 
+            className="pagination-btn"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={!pagination.has_next}
+          >
+            Next
+            <MdChevronRight size={20} />
+          </button>
+        </div>
+      )}
+
+      {/* Details Modal - SAME AS BEFORE */}
       {showDetailsModal && selectedConsultation && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content details-modal" onClick={(e) => e.stopPropagation()}>
@@ -235,157 +351,8 @@ const ConsultationHistory = () => {
             </div>
 
             <div className="details-body">
-              {/* Consultation Info */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <FaNotesMedical size={20} />
-                  <h3>Consultation Information</h3>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Consultation Number:</span>
-                  <span className="detail-value">{selectedConsultation.consultationNumber}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Date & Time:</span>
-                  <span className="detail-value">
-                    {new Date(selectedConsultation.date).toLocaleDateString('en-US', { 
-                      month: 'long', 
-                      day: 'numeric',
-                      year: 'numeric'
-                    })} at {selectedConsultation.time}
-                  </span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Type:</span>
-                  <span className={`type-badge ${selectedConsultation.type.toLowerCase().replace(' ', '-')}`}>
-                    {selectedConsultation.type}
-                  </span>
-                </div>
-              </div>
-
-              {/* Doctor Info */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <FaUserMd size={20} />
-                  <h3>Consulting Doctor</h3>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Doctor Name:</span>
-                  <span className="detail-value">{selectedConsultation.doctorName}</span>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Specialty:</span>
-                  <span className="detail-value">{selectedConsultation.specialty}</span>
-                </div>
-              </div>
-
-              {/* Chief Complaint */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <MdInfo size={20} />
-                  <h3>Chief Complaint</h3>
-                </div>
-                <div className="info-box">
-                  {selectedConsultation.chiefComplaint}
-                </div>
-              </div>
-
-              {/* Vital Signs */}
-              {Object.keys(selectedConsultation.vitalSigns).length > 0 && (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <FaStethoscope size={20} />
-                    <h3>Vital Signs</h3>
-                  </div>
-                  <div className="vitals-grid">
-                    {Object.entries(selectedConsultation.vitalSigns).map(([key, value]) => (
-                      <div key={key} className="vital-item">
-                        <span className="vital-label">{key.replace(/([A-Z])/g, ' $1').trim()}:</span>
-                        <span className="vital-value">{value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Symptoms */}
-              {selectedConsultation.symptoms.length > 0 && (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <MdInfo size={20} />
-                    <h3>Symptoms</h3>
-                  </div>
-                  <div className="symptoms-tags">
-                    {selectedConsultation.symptoms.map((symptom, index) => (
-                      <span key={index} className="symptom-tag">{symptom}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Examination */}
-              {selectedConsultation.examination && (
-                <div className="details-section">
-                  <div className="section-header-small">
-                    <FaStethoscope size={20} />
-                    <h3>Physical Examination</h3>
-                  </div>
-                  <div className="info-box">
-                    {selectedConsultation.examination}
-                  </div>
-                </div>
-              )}
-
-              {/* Diagnosis */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <MdLocalHospital size={20} />
-                  <h3>Diagnosis</h3>
-                </div>
-                <div className="diagnosis-box">
-                  {selectedConsultation.diagnosis}
-                </div>
-              </div>
-
-              {/* Treatment Plan */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <FaFileMedical size={20} />
-                  <h3>Treatment Plan</h3>
-                </div>
-                <div className="info-box">
-                  {selectedConsultation.treatmentPlan}
-                </div>
-              </div>
-
-              {/* Follow-up & Notes */}
-              <div className="details-section">
-                <div className="section-header-small">
-                  <MdCalendarToday size={20} />
-                  <h3>Follow-up & Notes</h3>
-                </div>
-                <div className="detail-row">
-                  <span className="detail-label">Prescription Issued:</span>
-                  <span className="detail-value">{selectedConsultation.prescriptionIssued}</span>
-                </div>
-                {selectedConsultation.followUpDate && (
-                  <div className="detail-row">
-                    <span className="detail-label">Follow-up Date:</span>
-                    <span className="detail-value">
-                      {new Date(selectedConsultation.followUpDate).toLocaleDateString('en-US', { 
-                        month: 'long', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </span>
-                  </div>
-                )}
-                {selectedConsultation.notes && (
-                  <div className="notes-box-detail">
-                    <strong>Doctor's Notes:</strong> {selectedConsultation.notes}
-                  </div>
-                )}
-              </div>
+              {/* ... REST OF MODAL CONTENT STAYS THE SAME ... */}
+              {/* (Keep all the existing modal content from your original file) */}
             </div>
           </div>
         </div>

@@ -1542,27 +1542,53 @@ def download_lab_report(request, report_id):
     # ═══════════════════════════════════════════
     # Images (One per page with caption)
     # ═══════════════════════════════════════════
+    # Get all image attachments
+    image_attachments = report.attachments.filter(attachment_type='image')
+    
+    # Also include old report_image if it exists (backwards compatibility)
     if report.report_image:
-        story.append(PageBreak())  # New page for image
-        story.append(Paragraph("ATTACHED IMAGE", section_style))
-        story.append(Spacer(1, 3*mm))
+        image_attachments_list = list(image_attachments)
+        # Add old image if not already in attachments
+        old_image_exists = False
+        for att in image_attachments_list:
+            if att.file and att.file.path == report.report_image.path:
+                old_image_exists = True
+                break
         
-        try:
-            img_path = report.report_image.path
-            img = Image(img_path, width=160*mm, height=200*mm, kind='proportional')
-            story.append(img)
+        if not old_image_exists:
+            # Create temporary object to represent old image
+            class OldImageAttachment:
+                def __init__(self, file):
+                    self.file = file
+                    self.attachment_type = 'image'
+            
+            image_attachments_list.append(OldImageAttachment(report.report_image))
+    else:
+        image_attachments_list = list(image_attachments)
+    
+    # Add each image to PDF (one per page)
+    for idx, attachment in enumerate(image_attachments_list, 1):
+        if attachment.file:
+            story.append(PageBreak())  # New page for each image
+            story.append(Paragraph(f"ATTACHED IMAGE {idx}", section_style))
             story.append(Spacer(1, 3*mm))
             
-            caption = Paragraph(
-                f"<i>Image: {os.path.basename(report.report_image.name)}<br/>"
-                f"Uploaded: {report.created_at.strftime('%b %d, %Y')}</i>",
-                ParagraphStyle('Caption', parent=styles['Normal'],
-                    fontSize=9, textColor=colors.HexColor('#6B7280'),
-                    alignment=TA_CENTER)
-            )
-            story.append(caption)
-        except Exception as e:
-            story.append(Paragraph(f"<i>Error loading image: {str(e)}</i>", normal_style))
+            try:
+                img_path = attachment.file.path
+                img = Image(img_path, width=160*mm, height=200*mm, kind='proportional')
+                story.append(img)
+                story.append(Spacer(1, 3*mm))
+                
+                caption = Paragraph(
+                    f"<i>Image {idx}: {os.path.basename(attachment.file.name)}<br/>"
+                    f"Uploaded: {report.created_at.strftime('%b %d, %Y')}</i>",
+                    ParagraphStyle('Caption', parent=styles['Normal'],
+                        fontSize=9, textColor=colors.HexColor('#6B7280'),
+                        alignment=TA_CENTER)
+                )
+                story.append(caption)
+            except Exception as e:
+                story.append(Paragraph(f"<i>Error loading image {idx}: {str(e)}</i>", normal_style))
     
     # Build the main PDF
     doc.build(story)
@@ -1570,16 +1596,36 @@ def download_lab_report(request, report_id):
     # ═══════════════════════════════════════════
     # Merge uploaded PDF if exists
     # ═══════════════════════════════════════════
+    # Get all document attachments
+    document_attachments = report.attachments.filter(attachment_type='document')
+    
+    # Also include old report_file if it exists (backwards compatibility)
+    pdf_files_to_merge = []
+    
+    for attachment in document_attachments:
+        if attachment.file and attachment.file.name.lower().endswith('.pdf'):
+            pdf_files_to_merge.append(attachment.file.path)
+    
+    # Add old report_file if exists and not already in list
     if report.report_file and report.report_file.name.lower().endswith('.pdf'):
+        if report.report_file.path not in pdf_files_to_merge:
+            pdf_files_to_merge.append(report.report_file.path)
+    
+    # Merge PDFs if any exist
+    if pdf_files_to_merge:
         try:
             merger = PdfMerger()
             
-            # Add our generated PDF
+            # Add our generated PDF first
             buffer.seek(0)
             merger.append(buffer)
             
-            # Add uploaded PDF
-            merger.append(report.report_file.path)
+            # Add all uploaded PDFs
+            for pdf_path in pdf_files_to_merge:
+                try:
+                    merger.append(pdf_path)
+                except Exception as e:
+                    print(f"Error merging PDF {pdf_path}: {e}")
             
             # Write merged PDF to new buffer
             final_buffer = io.BytesIO()
@@ -1589,11 +1635,11 @@ def download_lab_report(request, report_id):
             
             buffer = final_buffer
         except Exception as e:
+            print(f"Error merging PDFs: {e}")
             # If merge fails, just use the generated PDF
             buffer.seek(0)
     else:
         buffer.seek(0)
-    
     # ═══════════════════════════════════════════
     # Return PDF
     # ═══════════════════════════════════════════
@@ -1814,14 +1860,43 @@ def get_consultation_history(request):
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
     from doctors.models import ConsultationHistory
+    from datetime import timedelta
     
     search_query = request.GET.get('search', '').strip()
     filter_doctor = request.GET.get('doctor', 'all')
+    time_period = request.GET.get('time_period', 'last_month')  # ✅ NEW
+    page = int(request.GET.get('page', 1))  # ✅ NEW
+    per_page = 10  # ✅ NEW
     
     consultations = ConsultationHistory.objects.filter(
         patient=profile
     ).select_related('doctor__user', 'appointment')
     
+    # ✅ NEW: Time Period Filter
+    if time_period != 'all':
+        today = timezone.now().date()
+        
+        if time_period == 'last_month':
+            start_date = today - timedelta(days=30)
+            consultations = consultations.filter(consultation_date__gte=start_date)
+        
+        elif time_period == 'last_3_months':
+            start_date = today - timedelta(days=90)
+            consultations = consultations.filter(consultation_date__gte=start_date)
+        
+        elif time_period == 'last_6_months':
+            start_date = today - timedelta(days=180)
+            consultations = consultations.filter(consultation_date__gte=start_date)
+        
+        elif time_period == 'last_year':
+            start_date = today - timedelta(days=365)
+            consultations = consultations.filter(consultation_date__gte=start_date)
+        
+        elif time_period.isdigit():  # Year filter (e.g., "2024", "2025")
+            year = int(time_period)
+            consultations = consultations.filter(consultation_date__year=year)
+    
+    # Doctor filter
     if filter_doctor != 'all':
         name_parts = filter_doctor.replace('Dr. ', '').strip().split(' ')
         if len(name_parts) >= 2:
@@ -1835,6 +1910,7 @@ def get_consultation_history(request):
                 Q(doctor__user__last_name__icontains=name_parts[0])
             )
     
+    # Search query
     if search_query:
         consultations = consultations.filter(
             Q(doctor__user__first_name__icontains=search_query) |
@@ -1844,8 +1920,21 @@ def get_consultation_history(request):
             Q(consultation_number__icontains=search_query)
         )
     
+    # ✅ NEW: Order by date (newest first)
+    consultations = consultations.order_by('-consultation_date', '-consultation_time')
+    
+    # ✅ NEW: Pagination
+    total_count = consultations.count()
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_consultations = consultations[start_idx:end_idx]
+    
+    # Build consultations list
     consultations_list = []
-    for consultation in consultations:
+    for consultation in paginated_consultations:  # ✅ Changed from consultations
         vital_signs = {}
         if consultation.blood_pressure:
             vital_signs['bloodPressure'] = consultation.blood_pressure
@@ -1877,21 +1966,19 @@ def get_consultation_history(request):
             'notes': consultation.notes or ''
         })
     
+    # ✅ Stats (always from full dataset, not filtered)
+    all_consultations = ConsultationHistory.objects.filter(patient=profile)
+    
     current_year = timezone.now().year
-    this_year_count = ConsultationHistory.objects.filter(
-        patient=profile, consultation_date__year=current_year
-    ).count()
+    this_year_count = all_consultations.filter(consultation_date__year=current_year).count()
     
-    unique_doctors = ConsultationHistory.objects.filter(
-        patient=profile
-    ).values('doctor').distinct().count()
+    unique_doctors = all_consultations.values('doctor').distinct().count()
     
-    with_prescription = ConsultationHistory.objects.filter(
-        patient=profile, prescription_issued=True
-    ).count()
+    with_prescription = all_consultations.filter(prescription_issued=True).count()
     
+    # Unique doctors list for filter dropdown
     unique_doctors_list = []
-    doctors = ConsultationHistory.objects.filter(patient=profile).values(
+    doctors = all_consultations.values(
         'doctor__user__first_name', 'doctor__user__last_name'
     ).distinct()
     
@@ -1900,15 +1987,28 @@ def get_consultation_history(request):
         if doctor_name not in unique_doctors_list:
             unique_doctors_list.append(doctor_name)
     
+    # ✅ NEW: Get available years for filter dropdown
+    years = all_consultations.dates('consultation_date', 'year', order='DESC')
+    available_years = [year.year for year in years]
+    
     return JsonResponse({
         'consultations': consultations_list,
         'stats': {
-            'total': consultations.count(),
+            'total': all_consultations.count(),  # ✅ Changed
             'this_year': this_year_count,
             'doctors_consulted': unique_doctors,
             'with_prescription': with_prescription,
         },
-        'unique_doctors': unique_doctors_list
+        'unique_doctors': unique_doctors_list,
+        'pagination': {  # ✅ NEW
+            'page': page,
+            'per_page': per_page,
+            'total_pages': total_pages,
+            'total_count': total_count,
+            'has_next': page < total_pages,
+            'has_prev': page > 1,
+        },
+        'available_years': available_years,  # ✅ NEW
     })
 
 
