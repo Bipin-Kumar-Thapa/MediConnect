@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MdSearch,
   MdClose,
@@ -10,12 +11,14 @@ import {
   MdCalendarToday,
   MdAccessTime,
   MdVerifiedUser,
-  MdCancel
+  MdCancel,
+  MdChevronRight
 } from 'react-icons/md';
 import { FaUserMd, FaStethoscope, FaHospital } from 'react-icons/fa';
 import '../../styles/patient/Doctors.css';
 
 const Doctors = () => {
+  const navigate = useNavigate();
   const [doctors, setDoctors] = useState([]);
   const [specialties, setSpecialties] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +26,9 @@ const Doctors = () => {
   const [filterSpecialty, setFilterSpecialty] = useState('all');
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  
+  // ✅ NEW: Ref for scrolling to doctor grid
+  const doctorGridRef = useRef(null);
 
   useEffect(() => {
     fetchDoctors();
@@ -64,6 +70,34 @@ const Doctors = () => {
     setShowDetailsModal(true);
   };
 
+  // ✅ NEW: Quick symptom button handler
+  const handleSymptomClick = (specialtyCode) => {
+    setFilterSpecialty(specialtyCode);
+    // Scroll to doctor grid
+    setTimeout(() => {
+      doctorGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  // ✅ NEW: Specialty card click handler
+  const handleSpecialtyCardClick = (specialtyCode) => {
+    setFilterSpecialty(specialtyCode);
+    // Scroll to doctor grid
+    setTimeout(() => {
+      doctorGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
+
+  // ✅ NEW: Quick symptom buttons data
+  const quickSymptoms = [
+    { label: 'Fever/Cold', icon: '🤒', specialty: 'general' },
+    { label: 'Heart Issues', icon: '💓', specialty: 'cardiology' },
+    { label: 'Headache', icon: '🤕', specialty: 'neurology' },
+    { label: 'Joint Pain', icon: '🦴', specialty: 'orthopedics' },
+    { label: 'Stomach', icon: '🤢', specialty: 'gastroenterology' },
+    { label: 'Pregnancy', icon: '🤰', specialty: 'gynecology' },
+  ];
+
   if (loading) {
     return <div className="doctors-page">Loading...</div>;
   }
@@ -77,14 +111,70 @@ const Doctors = () => {
         </div>
       </div>
 
-      <div className="search-filter-section">
+      {/* ✅ NEW: Quick Symptom Buttons Section */}
+      <div className="symptom-buttons-section">
+        <h2>🩺 Not sure which doctor to see?</h2>
+        <p>Choose by your symptom:</p>
+        <div className="symptom-buttons">
+          {quickSymptoms.map((symptom, index) => (
+            <button
+              key={index}
+              className="symptom-btn"
+              onClick={() => handleSymptomClick(symptom.specialty)}
+            >
+              <span className="symptom-icon">{symptom.icon}</span>
+              <span className="symptom-label">{symptom.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ✅ NEW: Specialty Info Cards Section */}
+      <div className="specialty-cards-section">
+        <h2>Or browse by medical specialty:</h2>
+        <div className="specialty-cards-grid">
+          {specialties.map((specialty) => (
+            <div
+              key={specialty.code}
+              className="specialty-info-card"
+              onClick={() => handleSpecialtyCardClick(specialty.code)}
+            >
+              <div className="specialty-card-header">
+                <span className="specialty-icon-large">{specialty.icon}</span>
+                <h3>{specialty.name}</h3>
+              </div>
+              <p className="specialty-description">{specialty.description}</p>
+              <div className="specialty-conditions">
+                <strong>Common conditions:</strong>
+                <ul>
+                  {specialty.commonConditions?.map((condition, idx) => (
+                    <li key={idx}>{condition}</li>
+                  ))}
+                </ul>
+              </div>
+              <button className="btn-view-specialty">
+                View Doctors <MdChevronRight size={18} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Search and Filter Section (EXISTING) */}
+      <div className="search-filter-section" ref={doctorGridRef}>
         <div className="search-box">
           <MdSearch size={20} />
           <input 
             type="text" 
-            placeholder="Search doctors by name, specialty, or department..."
+            placeholder="Search doctors by name, specialty, or symptom..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              // ✅ FIX: Reset filter when user starts typing
+              if (e.target.value.length > 0 && filterSpecialty !== 'all') {
+                setFilterSpecialty('all');
+              }
+            }}
           />
         </div>
         <select 
@@ -101,12 +191,18 @@ const Doctors = () => {
         </select>
       </div>
 
+      {/* Doctor Grid (EXISTING) */}
       <div className="doctors-grid">
         {doctors.length === 0 ? (
           <div className="no-doctors">
             <FaUserMd size={48} />
             <h3>No doctors found</h3>
-            <p>Try adjusting your search or filters</p>
+            <p>
+              {searchQuery || filterSpecialty !== 'all'
+                ? 'Try adjusting your search or filters'
+                : 'No doctors available'
+              }
+            </p>
           </div>
         ) : (
           doctors.map((doctor) => (
@@ -166,6 +262,7 @@ const Doctors = () => {
         )}
       </div>
 
+      {/* Details Modal (EXISTING - NO CHANGES) */}
       {showDetailsModal && selectedDoctor && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content doctor-details-modal" onClick={(e) => e.stopPropagation()}>
@@ -289,7 +386,12 @@ const Doctors = () => {
               )}
 
               <div className="modal-actions">
-                <button className="btn-book-appointment">
+                <button 
+                  className="btn-book-appointment"
+                  onClick={() => {
+                    navigate(`/patient/appointments?doctor=${selectedDoctor.id}&specialty=${selectedDoctor.specialtyCode}`);
+                  }}
+                >
                   <MdCalendarToday size={20} />
                   Book Appointment
                 </button>

@@ -576,8 +576,19 @@ def get_doctor_prescriptions(request):
     
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
+    selected_date = request.GET.get('date', timezone.now().date().isoformat())  # ✅ NEW
     
-    prescriptions = Prescription.objects.filter(doctor=profile).select_related('patient__user').prefetch_related('medicines')
+    # ✅ NEW: Parse selected date
+    try:
+        filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
+    except:
+        filter_date = timezone.now().date()
+    
+    # ✅ UPDATED: Filter by selected date
+    prescriptions = Prescription.objects.filter(
+        doctor=profile,
+        prescribed_date=filter_date  # ✅ NEW: Filter by date
+    ).select_related('patient__user').prefetch_related('medicines')
     
     if status_filter != 'all':
         prescriptions = prescriptions.filter(status=status_filter)
@@ -609,11 +620,12 @@ def get_doctor_prescriptions(request):
             'validUntil': prescription.valid_until.isoformat()
         })
     
+    # ✅ UPDATED: Stats for selected date only
     stats = {
-        'total': Prescription.objects.filter(doctor=profile).count(),
-        'active': Prescription.objects.filter(doctor=profile, status='active').count(),
-        'completed': Prescription.objects.filter(doctor=profile, status='completed').count(),
-        'expired': Prescription.objects.filter(doctor=profile, status='expired').count(),
+        'total': Prescription.objects.filter(doctor=profile, prescribed_date=filter_date).count(),
+        'active': Prescription.objects.filter(doctor=profile, prescribed_date=filter_date, status='active').count(),
+        'completed': Prescription.objects.filter(doctor=profile, prescribed_date=filter_date, status='completed').count(),
+        'expired': Prescription.objects.filter(doctor=profile, prescribed_date=filter_date, status='expired').count(),
     }
     
     return JsonResponse({'prescriptions': prescriptions_list, 'stats': stats})
@@ -700,15 +712,25 @@ def get_doctor_lab_reports(request):
     category_filter = request.GET.get('category', 'all')
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
+    selected_date = request.GET.get('date', timezone.now().date().isoformat())  # ✅ NEW
+    
+    # ✅ NEW: Parse selected date
+    try:
+        filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
+    except:
+        filter_date = timezone.now().date()
     
     patient_ids = Appointment.objects.filter(doctor=profile).values_list('patient_id', flat=True).distinct()
+    
+    # ✅ UPDATED: Filter by selected date (test_date or created_at)
     lab_reports = LabReport.objects.filter(
-        patient_id__in=patient_ids
+        patient_id__in=patient_ids,
+        test_date=filter_date  # ✅ NEW: Filter by test date
     ).select_related(
         'patient__user', 'uploaded_by'
     ).prefetch_related('test_sections__parameters', 'attachments')
     
-    # ✅ NEW: Category filter
+    # Category filter
     if category_filter != 'all':
         lab_reports = lab_reports.filter(
             test_sections__category=category_filter
@@ -777,13 +799,14 @@ def get_doctor_lab_reports(request):
             'attachments': attachments_data,
         })
     
+    # ✅ UPDATED: Stats for selected date only
     return JsonResponse({
         'reports': reports_list,
         'stats': {
-            'total': LabReport.objects.filter(patient_id__in=patient_ids).count(),
-            'normal': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='normal').count(),
-            'abnormal': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='abnormal').count(),
-            'critical': LabReport.objects.filter(patient_id__in=patient_ids, overall_status='critical').count(),
+            'total': LabReport.objects.filter(patient_id__in=patient_ids, test_date=filter_date).count(),
+            'normal': LabReport.objects.filter(patient_id__in=patient_ids, test_date=filter_date, overall_status='normal').count(),
+            'abnormal': LabReport.objects.filter(patient_id__in=patient_ids, test_date=filter_date, overall_status='abnormal').count(),
+            'critical': LabReport.objects.filter(patient_id__in=patient_ids, test_date=filter_date, overall_status='critical').count(),
         }
     })
 
@@ -965,9 +988,19 @@ def get_doctor_consultations(request):
             })
 
     else:
-        # Own consultations
+        # ✅ NEW: Get selected date parameter
+        selected_date = request.GET.get('date', timezone.now().date().isoformat())
+        
+        # ✅ NEW: Parse selected date
+        try:
+            filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
+        except:
+            filter_date = timezone.now().date()
+        
+        # ✅ UPDATED: Filter by selected date
         consultations = ConsultationHistory.objects.filter(
-            doctor=profile
+            doctor=profile,
+            consultation_date=filter_date  # ✅ NEW: Filter by date
         ).select_related('patient__user', 'appointment')
 
         if type_filter == 'New Visit':
@@ -1019,11 +1052,26 @@ def get_doctor_consultations(request):
             })
 
     # Stats always based on own consultations
-    total = ConsultationHistory.objects.filter(doctor=profile).count()
-    week_ago = timezone.now().date() - timedelta(days=7)
-    this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date__gte=week_ago).count()
-    follow_ups = ConsultationHistory.objects.filter(doctor=profile, consultation_type='follow_up').count()
-    new_visits = ConsultationHistory.objects.filter(doctor=profile, consultation_type='new_visit').count()
+    if type_filter != 'Shared':
+        # Get the filter_date from earlier
+        try:
+            selected_date = request.GET.get('date', timezone.now().date().isoformat())
+            filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
+        except:
+            filter_date = timezone.now().date()
+        
+        total = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date).count()
+        this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date).count()  # Same as total for selected date
+        follow_ups = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date, consultation_type='follow_up').count()
+        new_visits = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date, consultation_type='new_visit').count()
+    else:
+        # For shared consultations, show all-time stats
+        total = ConsultationHistory.objects.filter(doctor=profile).count()
+        week_ago = timezone.now().date() - timedelta(days=7)
+        this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date__gte=week_ago).count()
+        follow_ups = ConsultationHistory.objects.filter(doctor=profile, consultation_type='follow_up').count()
+        new_visits = ConsultationHistory.objects.filter(doctor=profile, consultation_type='new_visit').count()
+
     shared_count = SharedConsultation.objects.filter(shared_with=profile).count()
 
     return JsonResponse({

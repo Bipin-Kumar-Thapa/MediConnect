@@ -11,7 +11,9 @@ import {
   MdWarning,
   MdError,
   MdAttachFile,
-  MdImage
+  MdImage,
+  MdChevronLeft, 
+  MdChevronRight,
 } from 'react-icons/md';
 import { FaFlask } from 'react-icons/fa';
 import '../../styles/doctor/DoctorLabReports.css';
@@ -31,6 +33,9 @@ const DoctorLabReports = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     fetchLabReports();
@@ -38,7 +43,11 @@ const DoctorLabReports = () => {
 
   useEffect(() => {
     fetchLabReports();
-  }, [filterCategory, filterStatus, searchQuery]);
+  }, [filterCategory, filterStatus, searchQuery, selectedDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterCategory, filterStatus, searchQuery, selectedDate]);
 
   const fetchLabReports = async () => {
     try {
@@ -52,6 +61,7 @@ const DoctorLabReports = () => {
       if (searchQuery) {
         params.append('search', searchQuery);
       }
+      params.append('date', selectedDate);
 
       const response = await fetch(
         `http://localhost:8000/doctor/lab-reports/?${params.toString()}`,
@@ -126,6 +136,29 @@ const DoctorLabReports = () => {
     { label: 'Critical', value: stats.critical, color: '#EF4444' }
   ];
 
+  const totalPages = Math.ceil(labReports.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentReports = labReports.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) {
+      startPage = Math.max(1, endPage - 4);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
   if (loading) {
     return <div className="doctor-lab-reports-page">Loading...</div>;
   }
@@ -136,6 +169,15 @@ const DoctorLabReports = () => {
         <div className="header-content">
           <h1>Lab Reports</h1>
           <p>View and manage patient laboratory reports</p>
+        </div>
+        <div className="header-date">
+          <MdCalendarToday size={18} />
+          <input 
+            type="date" 
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="date-picker"
+          />
         </div>
       </div>
 
@@ -199,7 +241,7 @@ const DoctorLabReports = () => {
             </p>
           </div>
         ) : (
-          labReports.map((report) => (
+          currentReports.map((report) => (
             <div key={report.id} className="lab-report-card">
               <div className="card-header-lab">
                 <div className="report-number">
@@ -261,6 +303,60 @@ const DoctorLabReports = () => {
           ))
         )}
       </div>
+
+      {/* ✅ NEW: Pagination Controls */}
+      {labReports.length > ITEMS_PER_PAGE && (
+        <div className="pagination">
+          <div className="pagination-info">
+            Showing {startIndex + 1}–{Math.min(endIndex, labReports.length)} of {labReports.length} reports
+          </div>
+          <div className="pagination-controls">
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <MdChevronLeft size={20} />
+            </button>
+
+            {getPageNumbers()[0] > 1 && (
+              <>
+                <button className="page-btn" onClick={() => handlePageChange(1)}>1</button>
+                {getPageNumbers()[0] > 2 && <span className="page-ellipsis">...</span>}
+              </>
+            )}
+
+            {getPageNumbers().map(page => (
+              <button
+                key={page}
+                className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                onClick={() => handlePageChange(page)}
+              >
+                {page}
+              </button>
+            ))}
+
+            {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+              <>
+                {getPageNumbers()[getPageNumbers().length - 1] < totalPages - 1 && (
+                  <span className="page-ellipsis">...</span>
+                )}
+                <button className="page-btn" onClick={() => handlePageChange(totalPages)}>
+                  {totalPages}
+                </button>
+              </>
+            )}
+
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <MdChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {showDetailsModal && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>

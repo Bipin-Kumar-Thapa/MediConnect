@@ -7,7 +7,9 @@ import {
   MdClose,
   MdSearch,
   MdInfo,
-  MdDelete
+  MdDelete,
+  MdChevronLeft,  
+  MdChevronRight
 } from 'react-icons/md';
 import { FaFileMedical, FaPrescription } from 'react-icons/fa';
 import { getCSRFToken } from '../../utils/csrf';
@@ -27,6 +29,9 @@ const DoctorPrescriptions = () => {
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const [formData, setFormData] = useState({
     patient_id: '',
@@ -46,13 +51,18 @@ const DoctorPrescriptions = () => {
 
   useEffect(() => {
     fetchPrescriptions();
-  }, [filterStatus, searchQuery]);
+  }, [filterStatus, searchQuery, selectedDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus, searchQuery, selectedDate]);
 
   const fetchPrescriptions = async () => {
     try {
       const params = new URLSearchParams();
       if (filterStatus !== 'all') params.append('status', filterStatus);
       if (searchQuery) params.append('search', searchQuery);
+      params.append('date', selectedDate); 
 
       const response = await fetch(
         `http://localhost:8000/doctor/prescriptions/?${params.toString()}`,
@@ -155,12 +165,34 @@ const DoctorPrescriptions = () => {
 
   const getStatusClass = (status) => `status-${status}`;
 
-  // ✅ Removed 'Completed' stat
   const statsArray = [
     { label: 'Total Prescriptions', value: stats.total,   color: '#3B82F6' },
     { label: 'Active',              value: stats.active,  color: '#10B981' },
     { label: 'Expired',             value: stats.expired, color: '#EF4444' }
   ];
+
+  const totalPages = Math.ceil(prescriptions.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentPrescriptions = prescriptions.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) {
+      startPage = Math.max(1, endPage - 4);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
 
   if (loading) {
     return <div className="doctor-prescriptions-page">Loading...</div>;
@@ -174,6 +206,17 @@ const DoctorPrescriptions = () => {
         <div className="header-content">
           <h1>Prescriptions</h1>
           <p>Manage patient prescriptions</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+          <div className="header-date">
+            <MdCalendarToday size={18} />
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="date-picker"
+            />
+          </div>
         </div>
         <button className="btn-create" onClick={() => setShowCreateModal(true)}>
           <MdAdd size={20} />
@@ -224,7 +267,7 @@ const DoctorPrescriptions = () => {
             </p>
           </div>
         ) : (
-          prescriptions.map((prescription) => (
+          currentPrescriptions.map((prescription) => (
             <div key={prescription.id} className="prescription-card">
               <div className="card-header-rx">
                 <div className="rx-number">
@@ -279,6 +322,60 @@ const DoctorPrescriptions = () => {
           ))
         )}
       </div>
+
+      {/* ✅ NEW: Pagination Controls */}
+      {prescriptions.length > ITEMS_PER_PAGE && (
+        <div className="pagination">
+          <div className="pagination-info">
+            Showing {startIndex + 1}–{Math.min(endIndex, prescriptions.length)} of {prescriptions.length} prescriptions
+          </div>
+          <div className="pagination-controls">
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <MdChevronLeft size={20} />
+            </button>
+
+            {getPageNumbers()[0] > 1 && (
+              <>
+                <button className="page-btn" onClick={() => handlePageChange(1)}>1</button>
+                {getPageNumbers()[0] > 2 && <span className="page-ellipsis">...</span>}
+              </>
+            )}
+
+            {getPageNumbers().map(page => (
+              <button
+                key={page}
+                className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                onClick={() => handlePageChange(page)}
+              >
+                {page}
+              </button>
+            ))}
+
+            {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+              <>
+                {getPageNumbers()[getPageNumbers().length - 1] < totalPages - 1 && (
+                  <span className="page-ellipsis">...</span>
+                )}
+                <button className="page-btn" onClick={() => handlePageChange(totalPages)}>
+                  {totalPages}
+                </button>
+              </>
+            )}
+
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <MdChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Create Prescription Modal */}
       {showCreateModal && (

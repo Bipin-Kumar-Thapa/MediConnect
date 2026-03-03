@@ -1987,20 +1987,20 @@ def get_consultation_history(request):
         if doctor_name not in unique_doctors_list:
             unique_doctors_list.append(doctor_name)
     
-    # ✅ NEW: Get available years for filter dropdown
+    # Get available years for filter dropdown
     years = all_consultations.dates('consultation_date', 'year', order='DESC')
     available_years = [year.year for year in years]
     
     return JsonResponse({
         'consultations': consultations_list,
         'stats': {
-            'total': all_consultations.count(),  # ✅ Changed
+            'total': all_consultations.count(), 
             'this_year': this_year_count,
             'doctors_consulted': unique_doctors,
             'with_prescription': with_prescription,
         },
         'unique_doctors': unique_doctors_list,
-        'pagination': {  # ✅ NEW
+        'pagination': { 
             'page': page,
             'per_page': per_page,
             'total_pages': total_pages,
@@ -2008,7 +2008,7 @@ def get_consultation_history(request):
             'has_next': page < total_pages,
             'has_prev': page > 1,
         },
-        'available_years': available_years,  # ✅ NEW
+        'available_years': available_years, 
     })
 
 
@@ -2024,11 +2024,79 @@ def get_all_doctors(request):
             doctors = doctors.filter(specialization=specialty)
         
         if search:
-            doctors = doctors.filter(
-                Q(user__first_name__icontains=search) |
-                Q(user__last_name__icontains=search) |
-                Q(specialization__icontains=search)
-            )
+            # ✅ NEW: Smart keyword matching for symptoms
+            search_lower = search.lower()
+            
+            # Check for symptom keywords
+            symptom_to_specialty = {
+                # Heart-related
+                'heart': 'cardiology',
+                'chest pain': 'cardiology',
+                'chest': 'cardiology',
+                'palpitation': 'cardiology',
+                'blood pressure': 'cardiology',
+                'bp': 'cardiology',
+                
+                # Brain/Head-related
+                'head': 'neurology',
+                'headache': 'neurology',
+                'migraine': 'neurology',
+                'dizzy': 'neurology',
+                'dizziness': 'neurology',
+                'seizure': 'neurology',
+                'stroke': 'neurology',
+                'brain': 'neurology',
+                
+                # Bones/Joints
+                'walk': 'orthopedics',
+                'walking': 'orthopedics',
+                'leg': 'orthopedics',
+                'back pain': 'orthopedics',
+                'back': 'orthopedics',
+                'joint': 'orthopedics',
+                'bone': 'orthopedics',
+                'knee': 'orthopedics',
+                'hip': 'orthopedics',
+                
+                # Stomach/Digestive
+                'stomach': 'gastroenterology',
+                'digestion': 'gastroenterology',
+                'diarrhea': 'gastroenterology',
+                'constipation': 'gastroenterology',
+                
+                # Pregnancy/Women
+                'pregnant': 'gynecology',
+                'pregnancy': 'gynecology',
+                'period': 'gynecology',
+                'menstrual': 'gynecology',
+                
+                # General
+                'fever': 'general',
+                'cold': 'general',
+                'cough': 'general',
+                'flu': 'general',
+                'neck': 'general',
+                'dont': 'general',
+                'unable': 'general',
+            }
+            
+            # Check if search contains any symptom keywords
+            matched_specialty = None
+            for keyword, spec in symptom_to_specialty.items():
+                if keyword in search_lower:
+                    matched_specialty = spec
+                    break
+            
+            if matched_specialty:
+                # Filter by the detected specialty
+                doctors = doctors.filter(specialization=matched_specialty)
+            else:
+                # Normal name/specialty search
+                doctors = doctors.filter(
+                    Q(user__first_name__icontains=search) |
+                    Q(user__last_name__icontains=search) |
+                    Q(specialization__icontains=search)
+                )
         
         doctors_list = []
         for doctor in doctors:
@@ -2074,16 +2142,136 @@ def get_all_doctors(request):
                 'isVerified': doctor.is_verified,
             })
         
+        # ✅ NEW: Get all specialties with enhanced info
         all_specialties = DoctorProfile.objects.filter(
             is_active=True
         ).values_list('specialization', flat=True).distinct()
         
-        specialties_list = [
-            {'code': spec, 'name': dict(DoctorProfile.SPECIALTY_CHOICES).get(spec, spec)}
-            for spec in all_specialties
-        ]
+        # ✅ NEW: Specialty info with descriptions and common conditions
+        specialties_with_info = []
+        specialty_details = {
+            'cardiology': {
+                'icon': '🫀',
+                'description': 'Heart and blood vessel specialists',
+                'commonConditions': [
+                    'Chest pain or discomfort',
+                    'High blood pressure',
+                    'Irregular heartbeat',
+                    'Heart disease prevention'
+                ]
+            },
+            'neurology': {
+                'icon': '🧠',
+                'description': 'Brain, nerve and nervous system experts',
+                'commonConditions': [
+                    'Severe or recurring headaches',
+                    'Seizures or epilepsy',
+                    'Stroke or paralysis',
+                    'Memory problems'
+                ]
+            },
+            'orthopedics': {
+                'icon': '🦴',
+                'description': 'Bone, joint and muscle specialists',
+                'commonConditions': [
+                    'Back or joint pain',
+                    'Sports injuries',
+                    'Difficulty walking',
+                    'Fractures or arthritis'
+                ]
+            },
+            'pediatrics': {
+                'icon': '👶',
+                'description': 'Child health specialists',
+                'commonConditions': [
+                    'Child fever or infections',
+                    'Growth concerns',
+                    'Vaccinations',
+                    'Developmental issues'
+                ]
+            },
+            'dermatology': {
+                'icon': '🩹',
+                'description': 'Skin, hair and nail specialists',
+                'commonConditions': [
+                    'Skin rashes or acne',
+                    'Hair loss',
+                    'Allergies',
+                    'Skin infections'
+                ]
+            },
+            'gynecology': {
+                'icon': '🤰',
+                'description': 'Women\'s health specialists',
+                'commonConditions': [
+                    'Pregnancy care',
+                    'Menstrual problems',
+                    'Reproductive health',
+                    'Prenatal checkups'
+                ]
+            },
+            'general': {
+                'icon': '🩺',
+                'description': 'First point of care for all health concerns',
+                'commonConditions': [
+                    'Fever, cold or flu',
+                    'General check-ups',
+                    'Stomach problems',
+                    'Not sure what\'s wrong'
+                ]
+            },
+            'ent': {
+                'icon': '👂',
+                'description': 'Ear, nose and throat specialists',
+                'commonConditions': [
+                    'Ear infections',
+                    'Sinus problems',
+                    'Throat pain',
+                    'Hearing issues'
+                ]
+            },
+            'ophthalmology': {
+                'icon': '👁️',
+                'description': 'Eye care specialists',
+                'commonConditions': [
+                    'Vision problems',
+                    'Eye infections',
+                    'Cataracts or glaucoma',
+                    'Eye exams'
+                ]
+            },
+            'gastroenterology': {
+                'icon': '🤢',
+                'description': 'Digestive system specialists',
+                'commonConditions': [
+                    'Stomach pain',
+                    'Digestive problems',
+                    'Diarrhea or constipation',
+                    'Liver issues'
+                ]
+            },
+        }
         
-        return JsonResponse({'doctors': doctors_list, 'specialties': specialties_list})
+        for spec_code in all_specialties:
+            spec_name = dict(DoctorProfile.SPECIALTY_CHOICES).get(spec_code, spec_code)
+            spec_info = specialty_details.get(spec_code, {
+                'icon': '🩺',
+                'description': 'Medical specialist',
+                'commonConditions': ['Various medical conditions']
+            })
+            
+            specialties_with_info.append({
+                'code': spec_code,
+                'name': spec_name,
+                'icon': spec_info['icon'],
+                'description': spec_info['description'],
+                'commonConditions': spec_info['commonConditions']
+            })
+        
+        return JsonResponse({
+            'doctors': doctors_list,
+            'specialties': specialties_with_info  # ✅ Enhanced with descriptions
+        })
         
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)

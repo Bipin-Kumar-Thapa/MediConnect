@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   MdCalendarToday, 
   MdAccessTime,
@@ -25,6 +25,7 @@ import '../../styles/patient/Appointments.css';
 const ITEMS_PER_PAGE = 10;
 
 const Appointments = () => {
+  const navigate = useNavigate(); 
   const location = useLocation();
 
   const [appointments, setAppointments] = useState([]);
@@ -36,7 +37,7 @@ const Appointments = () => {
     completed: 0,
     cancelled: 0,
     missed: 0,
-    needs_rescheduling: 0 // ← NEW STAT
+    needs_rescheduling: 0 
   });
   const [loading, setLoading] = useState(true);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -137,6 +138,27 @@ const Appointments = () => {
       }, 4000);
     }
   }, [location.search, appointments]);
+
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const doctorId = params.get('doctor');
+    const specialtyCode = params.get('specialty');
+    
+    // If both parameters exist, auto-fill the form
+    if (doctorId && specialtyCode && doctors.length > 0) {
+      // Set specialty
+      setFormData(prev => ({
+        ...prev,
+        specialty: specialtyCode,
+        doctor_id: doctorId,
+      }));
+      
+      // Auto-open the booking modal
+      setShowBookingModal(true);
+    }
+  }, [location.search, doctors]);
+
 
   useEffect(() => {
     if (formData.doctor_id) {
@@ -347,6 +369,11 @@ const Appointments = () => {
         });
 
         setShowConfirmation(true);
+
+        // ✅ Clear URL parameters after successful booking
+        if (new URLSearchParams(location.search).get('doctor')) {
+          navigate('/patient/appointments', { replace: true });
+        }
 
         setFormData({
           specialty: '',
@@ -649,7 +676,16 @@ const Appointments = () => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Book New Appointment</h2>
-              <button className="close-btn" onClick={() => setShowBookingModal(false)}>
+              <button 
+                className="close-btn" 
+                onClick={() => {
+                  setShowBookingModal(false);
+                  // ✅ Clear URL parameters when closing
+                  if (new URLSearchParams(location.search).get('doctor')) {
+                    navigate('/patient/appointments', { replace: true });
+                  }
+                }}
+              >
                 <MdClose size={24} />
               </button>
             </div>
@@ -658,7 +694,17 @@ const Appointments = () => {
 
               <div className="form-group">
                 <label>Select Specialty *</label>
-                <select name="specialty" value={formData.specialty} onChange={handleFormChange} required>
+                <select 
+                  name="specialty" 
+                  value={formData.specialty} 
+                  onChange={handleFormChange} 
+                  disabled={!!new URLSearchParams(location.search).get('doctor')} // ✅ Lock if pre-filled
+                  required
+                  style={new URLSearchParams(location.search).get('doctor') ? {
+                    backgroundColor: '#F3F4F6',
+                    cursor: 'not-allowed'
+                  } : {}}
+                >
                   <option value="">Choose a specialty...</option>
                   {specialties.map(spec => (
                     <option key={spec.code} value={spec.code}>
@@ -666,12 +712,34 @@ const Appointments = () => {
                     </option>
                   ))}
                 </select>
+                {new URLSearchParams(location.search).get('doctor') && (
+                  <p style={{
+                    fontSize: '12px',
+                    color: '#6B7280',
+                    marginTop: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    🔒 Pre-selected from doctor profile
+                  </p>
+                )}
               </div>
 
               {formData.specialty && (
                 <div className="form-group">
                   <label>Select Doctor *</label>
-                  <select name="doctor_id" value={formData.doctor_id} onChange={handleFormChange} required>
+                  <select 
+                    name="doctor_id" 
+                    value={formData.doctor_id} 
+                    onChange={handleFormChange} 
+                    disabled={!!new URLSearchParams(location.search).get('doctor')} // ✅ Lock if pre-filled
+                    required
+                    style={new URLSearchParams(location.search).get('doctor') ? {
+                      backgroundColor: '#F3F4F6',
+                      cursor: 'not-allowed'
+                    } : {}}
+                  >
                     <option value="">Choose a doctor...</option>
                     {doctors
                       .filter(doctor => doctor.specialty_code === formData.specialty)
@@ -681,13 +749,25 @@ const Appointments = () => {
                         </option>
                       ))}
                   </select>
+                  {new URLSearchParams(location.search).get('doctor') && (
+                    <p style={{
+                      fontSize: '12px',
+                      color: '#6B7280',
+                      marginTop: '6px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      🔒 Pre-selected from doctor profile
+                    </p>
+                  )}
                   {doctors.filter(d => d.specialty_code === formData.specialty).length === 0 && (
                     <p className="error-text" style={{marginTop: '8px', fontSize: '13px'}}>
                       No doctors available for this specialty
                     </p>
                   )}
-                </div>
-              )}
+                </div>  
+              )}  
 
               {formData.doctor_id && (
                 <div className="form-group">
