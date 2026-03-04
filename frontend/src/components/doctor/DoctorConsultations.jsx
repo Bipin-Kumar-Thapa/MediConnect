@@ -10,7 +10,10 @@ import {
   MdVisibility,
   MdAccessTime,
   MdShare,
-  MdSend
+  MdSend,
+  MdEdit,
+  MdChevronLeft,
+  MdChevronRight
 } from 'react-icons/md';
 import { FaNotesMedical, FaStethoscope, FaFileMedical } from 'react-icons/fa';
 import { getCSRFToken } from '../../utils/csrf';
@@ -24,24 +27,37 @@ const DoctorConsultations = () => {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedConsultation, setSelectedConsultation] = useState(null);
   const [consultationToShare, setConsultationToShare] = useState(null);
+  const [consultationToEdit, setConsultationToEdit] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
-  // Share modal state
   const [allDoctors, setAllDoctors] = useState([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [shareMessage, setShareMessage] = useState('');
   const [sharing, setSharing] = useState(false);
   const [doctorSearchQuery, setDoctorSearchQuery] = useState('');
 
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+
   const [formData, setFormData] = useState({
     patient_id: '', consultation_type: '', chief_complaint: '',
     symptoms: '', blood_pressure: '', heart_rate: '', temperature: '',
     weight: '', height: '', examination: '', diagnosis: '',
+    treatment_plan: '', follow_up_date: '', prescription_issued: 'No', notes: ''
+  });
+
+  const [editFormData, setEditFormData] = useState({
+    chief_complaint: '', symptoms: '', blood_pressure: '', heart_rate: '',
+    temperature: '', weight: '', height: '', examination: '', diagnosis: '',
     treatment_plan: '', follow_up_date: '', prescription_issued: 'No', notes: ''
   });
 
@@ -52,13 +68,28 @@ const DoctorConsultations = () => {
 
   useEffect(() => {
     fetchConsultations();
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, selectedDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType, searchQuery, selectedDate]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.patient-search-container')) {
+        setShowPatientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchConsultations = async () => {
     try {
       const params = new URLSearchParams();
       if (filterType !== 'all') params.append('type', filterType);
       if (searchQuery) params.append('search', searchQuery);
+      if (filterType !== 'Shared') params.append('date', selectedDate);
 
       const response = await fetch(
         `http://localhost:8000/doctor/consultations/?${params.toString()}`,
@@ -105,6 +136,52 @@ const DoctorConsultations = () => {
     setShowDetailsModal(true);
   };
 
+  const handleOpenEdit = (consultation) => {
+    setConsultationToEdit(consultation);
+    setEditFormData({
+      chief_complaint: consultation.chiefComplaint || '',
+      symptoms: consultation.symptoms ? consultation.symptoms.join(', ') : '',
+      blood_pressure: consultation.vitalSigns?.bloodPressure || '',
+      heart_rate: consultation.vitalSigns?.heartRate || '',
+      temperature: consultation.vitalSigns?.temperature || '',
+      weight: consultation.vitalSigns?.weight || '',
+      height: consultation.vitalSigns?.height || '',
+      examination: consultation.examination || '',
+      diagnosis: consultation.diagnosis || '',
+      treatment_plan: consultation.treatmentPlan || '',
+      follow_up_date: consultation.followUpDate || '',
+      prescription_issued: consultation.prescriptionIssued || 'No',
+      notes: consultation.notes || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateConsultation = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(
+        `http://localhost:8000/doctor/consultations/${consultationToEdit.id}/update/`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+          body: JSON.stringify(editFormData)
+        }
+      );
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Consultation ${data.consultation_number} updated successfully!`);
+        setShowEditModal(false);
+        fetchConsultations();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to update consultation');
+      }
+    } catch (error) {
+      alert('An error occurred while updating consultation');
+    }
+  };
+
   const handleOpenShare = (consultation) => {
     setConsultationToShare(consultation);
     setSelectedDoctorId('');
@@ -134,6 +211,7 @@ const DoctorConsultations = () => {
       if (response.ok) {
         alert(data.message);
         setShowShareModal(false);
+        fetchConsultations();
       } else {
         alert(data.error || 'Failed to share consultation');
       }
@@ -146,6 +224,10 @@ const DoctorConsultations = () => {
 
   const handleFormChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
+  };
+
+  const handleEditFormChange = (field, value) => {
+    setEditFormData({ ...editFormData, [field]: value });
   };
 
   const handleAddConsultation = async (e) => {
@@ -170,6 +252,7 @@ const DoctorConsultations = () => {
           weight: '', height: '', examination: '', diagnosis: '',
           treatment_plan: '', follow_up_date: '', prescription_issued: 'No', notes: ''
         });
+        setPatientSearchQuery('');
         fetchConsultations();
       } else {
         const data = await response.json();
@@ -180,11 +263,37 @@ const DoctorConsultations = () => {
     }
   };
 
-  // Filter doctors in share modal by search
   const filteredDoctors = allDoctors.filter(d =>
-    d.name.toLowerCase().includes(doctorSearchQuery.toLowerCase()) ||
-    d.specialty.toLowerCase().includes(doctorSearchQuery.toLowerCase())
+    d.name?.toLowerCase().includes(doctorSearchQuery.toLowerCase()) ||
+    d.specialty?.toLowerCase().includes(doctorSearchQuery.toLowerCase())
   );
+
+  const filteredPatients = patients.filter(p =>
+    p.display?.toLowerCase().includes(patientSearchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(consultations.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentConsultations = consultations.slice(startIndex, endIndex);
+
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) {
+      startPage = Math.max(1, endPage - 4);
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
 
   const statsArray = [
     { label: 'Total Consultations', value: stats.total,     color: '#3B82F6' },
@@ -198,20 +307,30 @@ const DoctorConsultations = () => {
 
   return (
     <div className="doctor-consultations-page">
-
-      {/* Page Header */}
       <div className="page-header">
         <div className="header-content">
           <h1>Consultations</h1>
           <p>View and manage patient consultation notes</p>
         </div>
-        <button className="btn-add-consultation" onClick={() => setShowAddModal(true)}>
-          <MdAdd size={20} />
-          Add Consultation
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto' }}>
+          {filterType !== 'Shared' && (
+            <div className="header-date">
+              <MdCalendarToday size={18} />
+              <input 
+                type="date" 
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="date-picker"
+              />
+            </div>
+          )}
+          <button className="btn-add-consultation" onClick={() => setShowAddModal(true)}>
+            <MdAdd size={20} />
+            Add Consultation
+          </button>
+        </div>
       </div>
 
-      {/* Stats Cards */}
       <div className="stats-grid">
         {statsArray.map((stat, index) => (
           <div key={index} className="stat-card" style={{ borderLeftColor: stat.color }}>
@@ -221,7 +340,6 @@ const DoctorConsultations = () => {
         ))}
       </div>
 
-      {/* Filters and Search */}
       <div className="filters-section">
         <div className="search-box">
           <MdSearch size={20} />
@@ -236,14 +354,12 @@ const DoctorConsultations = () => {
           <button className={`filter-btn ${filterType === 'all'       ? 'active' : ''}`} onClick={() => setFilterType('all')}>All</button>
           <button className={`filter-btn ${filterType === 'New Visit' ? 'active' : ''}`} onClick={() => setFilterType('New Visit')}>New Visits</button>
           <button className={`filter-btn ${filterType === 'Follow-up' ? 'active' : ''}`} onClick={() => setFilterType('Follow-up')}>Follow-ups</button>
-          {/* Shared filter */}
           <button className={`filter-btn ${filterType === 'Shared'    ? 'active' : ''}`} onClick={() => setFilterType('Shared')}>
             Shared With Me
           </button>
         </div>
       </div>
 
-      {/* Consultations List */}
       <div className="consultations-list">
         {consultations.length === 0 ? (
           <div className="no-consultations">
@@ -252,83 +368,158 @@ const DoctorConsultations = () => {
             <p>{filterType !== 'all' || searchQuery ? 'Try adjusting your search or filters' : 'No consultation notes available yet'}</p>
           </div>
         ) : (
-          consultations.map((consultation) => (
-            <div key={consultation.id} className="consultation-card">
+          currentConsultations.map((consultation) => {
+            const consultationType = consultation.type || 'New Visit';
+            const typeClass = consultationType.toLowerCase().replace(' ', '-');
+            
+            return (
+              <div key={consultation.id} className="consultation-card">
+                {consultation.isShared && (
+                  <div className="shared-banner">
+                    <MdShare size={16} />
+                    <span>Shared by <strong>{consultation.sharedBy}</strong> ({consultation.sharedBySpecialty}) • {consultation.sharedAt}</span>
+                    {consultation.sharedMessage && (
+                      <span className="shared-message">"{consultation.sharedMessage}"</span>
+                    )}
+                  </div>
+                )}
 
-              {/* Shared banner - only shows for shared consultations */}
-              {consultation.isShared && (
-                <div className="shared-banner">
-                  <MdShare size={16} />
-                  <span>Shared by <strong>{consultation.sharedBy}</strong> ({consultation.sharedBySpecialty}) • {consultation.sharedAt}</span>
-                  {consultation.sharedMessage && (
-                    <span className="shared-message">"{consultation.sharedMessage}"</span>
+                <div className="card-header-cons">
+                  <div className="cons-number">
+                    <FaNotesMedical size={16} />
+                    {consultation.consultationNumber}
+                  </div>
+                  <span className={`type-badge ${typeClass}`}>
+                    {consultationType}
+                  </span>
+                </div>
+
+                {consultation.hasBeenSharedByMe && consultation.sharedWithDoctors && consultation.sharedWithDoctors.length > 0 && (
+                  <div className="shared-by-me-banner">
+                    <MdShare size={14} />
+                    <span>
+                      You have shared this with {consultation.sharedWithDoctors.length === 1 
+                        ? consultation.sharedWithDoctors[0]
+                        : `${consultation.sharedWithDoctors.length} doctors: ${consultation.sharedWithDoctors.join(', ')}`
+                      }
+                    </span>
+                  </div>
+                )}
+
+                <div className="card-body-cons">
+                  <div className="patient-section-cons">
+                    <div className="patient-avatar-cons">
+                      {consultation.patientName?.split(' ').map(n => n[0]).join('') || 'P'}
+                    </div>
+                    <div className="patient-details-cons">
+                      <h3>{consultation.patientName || 'Unknown Patient'}</h3>
+                      <p>{consultation.patientId || 'N/A'} • {consultation.age || 'N/A'} yrs • {consultation.gender || 'N/A'}</p>
+                    </div>
+                  </div>
+
+                  <div className="consultation-info">
+                    <div className="info-row-cons">
+                      <MdCalendarToday size={14} />
+                      <span>
+                        {consultation.date ? new Date(consultation.date).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric'
+                        }) : 'Invalid Date'} at {consultation.time || 'N/A'}
+                      </span>
+                    </div>
+                    <div className="diagnosis-preview">
+                      <strong>Diagnosis:</strong> {consultation.diagnosis || 'No diagnosis provided'}
+                    </div>
+                    <div className="complaint-preview">
+                      <strong>Chief Complaint:</strong> {consultation.chiefComplaint || 'No complaint provided'}
+                    </div>
+                  </div>
+
+                  {consultation.followUpDate && (
+                    <div className="follow-up-tag">
+                      <MdAccessTime size={14} />
+                      <span>Follow-up: {new Date(consultation.followUpDate).toLocaleDateString('en-US', {
+                        month: 'short', day: 'numeric', year: 'numeric'
+                      })}</span>
+                    </div>
                   )}
                 </div>
-              )}
 
-              <div className="card-header-cons">
-                <div className="cons-number">
-                  <FaNotesMedical size={16} />
-                  {consultation.consultationNumber}
-                </div>
-                <span className={`type-badge ${consultation.type.toLowerCase().replace(' ', '-')}`}>
-                  {consultation.type}
-                </span>
-              </div>
-
-              <div className="card-body-cons">
-                <div className="patient-section-cons">
-                  <div className="patient-avatar-cons">
-                    {consultation.patientName.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div className="patient-details-cons">
-                    <h3>{consultation.patientName}</h3>
-                    <p>{consultation.patientId} • {consultation.age} yrs • {consultation.gender}</p>
-                  </div>
-                </div>
-
-                <div className="consultation-info">
-                  <div className="info-row-cons">
-                    <MdCalendarToday size={14} />
-                    <span>{new Date(consultation.date).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric'
-                    })} at {consultation.time}</span>
-                  </div>
-                  <div className="diagnosis-preview">
-                    <strong>Diagnosis:</strong> {consultation.diagnosis}
-                  </div>
-                  <div className="complaint-preview">
-                    <strong>Chief Complaint:</strong> {consultation.chiefComplaint}
-                  </div>
-                </div>
-
-                {consultation.followUpDate && (
-                  <div className="follow-up-tag">
-                    <MdAccessTime size={14} />
-                    <span>Follow-up: {new Date(consultation.followUpDate).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric'
-                    })}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="card-actions-cons">
-                <button className="btn-view-cons" onClick={() => handleViewDetails(consultation)}>
-                  <MdVisibility size={18} />
-                  View Details
-                </button>
-                {/* Share button — only show on own consultations, not already-shared ones */}
-                {!consultation.isShared && (
-                  <button className="btn-share-cons" onClick={() => handleOpenShare(consultation)}>
-                    <MdShare size={18} />
-                    Share
+                <div className="card-actions-cons">
+                  <button className="btn-action-cons btn-view-cons" onClick={() => handleViewDetails(consultation)}>
+                    <MdVisibility size={18} />
+                    View
                   </button>
-                )}
+                  {!consultation.isShared && (
+                    <>
+                      <button className="btn-action-cons btn-edit-cons" onClick={() => handleOpenEdit(consultation)}>
+                        <MdEdit size={18} />
+                        Edit
+                      </button>
+                      <button className="btn-action-cons btn-share-cons" onClick={() => handleOpenShare(consultation)}>
+                        <MdShare size={18} />
+                        Share
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
+
+      {consultations.length > ITEMS_PER_PAGE && (
+        <div className="pagination">
+          <div className="pagination-info">
+            Showing {startIndex + 1}–{Math.min(endIndex, consultations.length)} of {consultations.length} consultations
+          </div>
+          <div className="pagination-controls">
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <MdChevronLeft size={20} />
+            </button>
+
+            {getPageNumbers()[0] > 1 && (
+              <>
+                <button className="page-btn" onClick={() => handlePageChange(1)}>1</button>
+                {getPageNumbers()[0] > 2 && <span className="page-ellipsis">...</span>}
+              </>
+            )}
+
+            {getPageNumbers().map(page => (
+              <button
+                key={page}
+                className={`page-btn ${currentPage === page ? 'active' : ''}`}
+                onClick={() => handlePageChange(page)}
+              >
+                {page}
+              </button>
+            ))}
+
+            {getPageNumbers()[getPageNumbers().length - 1] < totalPages && (
+              <>
+                {getPageNumbers()[getPageNumbers().length - 1] < totalPages - 1 && (
+                  <span className="page-ellipsis">...</span>
+                )}
+                <button className="page-btn" onClick={() => handlePageChange(totalPages)}>
+                  {totalPages}
+                </button>
+              </>
+            )}
+
+            <button
+              className="page-btn page-btn-nav"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              <MdChevronRight size={20} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Share Modal */}
       {showShareModal && consultationToShare && (
@@ -342,7 +533,6 @@ const DoctorConsultations = () => {
             </div>
 
             <div className="share-modal-body">
-              {/* Consultation summary */}
               <div className="share-consultation-summary">
                 <div className="summary-row">
                   <span className="summary-label">Consultation:</span>
@@ -358,7 +548,6 @@ const DoctorConsultations = () => {
                 </div>
               </div>
 
-              {/* Doctor search */}
               <div className="share-section">
                 <label>Select Doctor to Share With *</label>
                 <div className="doctor-search-box">
@@ -401,7 +590,6 @@ const DoctorConsultations = () => {
                 </div>
               </div>
 
-              {/* Message */}
               <div className="share-section">
                 <label>Message (Optional)</label>
                 <textarea
@@ -442,12 +630,71 @@ const DoctorConsultations = () => {
                 <div className="form-row">
                   <div className="form-group">
                     <label>Select Patient *</label>
-                    <select required value={formData.patient_id} onChange={(e) => handleFormChange('patient_id', e.target.value)}>
-                      <option value="">Choose a patient...</option>
-                      {patients.map(patient => (
-                        <option key={patient.id} value={patient.id}>{patient.display}</option>
-                      ))}
-                    </select>
+                    <div className="patient-search-container">
+                      <div className="patient-search-box-input">
+                        <MdSearch size={18} />
+                        <input
+                          type="text"
+                          placeholder="Search patient by name or ID..."
+                          value={patientSearchQuery}
+                          onChange={(e) => setPatientSearchQuery(e.target.value)}
+                          onFocus={() => setShowPatientDropdown(true)}
+                          required={!formData.patient_id}
+                        />
+                        {formData.patient_id && (
+                          <button
+                            type="button"
+                            className="clear-selection-btn"
+                            onClick={() => {
+                              setFormData({ ...formData, patient_id: '' });
+                              setPatientSearchQuery('');
+                            }}
+                          >
+                            <MdClose size={16} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Selected patient display */}
+                      {formData.patient_id && !showPatientDropdown && (
+                        <div className="selected-patient-display">
+                          <span className="selected-check-icon">✓</span>
+                          <span>
+                            {patients.find(p => p.id === parseInt(formData.patient_id))?.display || 'Patient selected'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Dropdown results */}
+                      {showPatientDropdown && patientSearchQuery && (
+                        <div className="patient-search-results">
+                          {filteredPatients.length === 0 ? (
+                            <div className="no-patients-found">
+                              <p>No patients found matching "{patientSearchQuery}"</p>
+                            </div>
+                          ) : (
+                            filteredPatients.map(patient => (
+                              <div
+                                key={patient.id}
+                                className="patient-result-item"
+                                onClick={() => {
+                                  setFormData({ ...formData, patient_id: patient.id });
+                                  setPatientSearchQuery(patient.display);
+                                  setShowPatientDropdown(false);
+                                }}
+                              >
+                                <div className="patient-result-avatar">
+                                  {patient.display.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                                <div className="patient-result-info">
+                                  <span className="patient-result-name">{patient.display}</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="form-group">
                     <label>Consultation Type *</label>
@@ -546,6 +793,117 @@ const DoctorConsultations = () => {
         </div>
       )}
 
+      {/* Edit Consultation Modal */}
+      {showEditModal && consultationToEdit && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content add-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Edit Consultation Note</h2>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}>
+                <MdClose size={24} />
+              </button>
+            </div>
+            <form className="consultation-form" onSubmit={handleUpdateConsultation}>
+              
+              {/* Locked fields display */}
+              <div className="locked-fields-display">
+                <div className="locked-field">
+                  <span className="locked-label">Patient:</span>
+                  <span className="locked-value">{consultationToEdit.patientName} ({consultationToEdit.patientId})</span>
+                </div>
+                <div className="locked-field">
+                  <span className="locked-label">Type:</span>
+                  <span className="locked-value">{consultationToEdit.type}</span>
+                </div>
+              </div>
+
+              <div className="form-section">
+                <h3>Chief Complaint *</h3>
+                <div className="form-group">
+                  <textarea rows="2" placeholder="Enter patient's main complaint..." required value={editFormData.chief_complaint} onChange={(e) => handleEditFormChange('chief_complaint', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Vital Signs</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Blood Pressure</label>
+                    <input type="text" placeholder="e.g., 120/80 mmHg" value={editFormData.blood_pressure} onChange={(e) => handleEditFormChange('blood_pressure', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Heart Rate</label>
+                    <input type="text" placeholder="e.g., 72 bpm" value={editFormData.heart_rate} onChange={(e) => handleEditFormChange('heart_rate', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Temperature</label>
+                    <input type="text" placeholder="e.g., 98.6°F" value={editFormData.temperature} onChange={(e) => handleEditFormChange('temperature', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Weight</label>
+                    <input type="text" placeholder="e.g., 70 kg" value={editFormData.weight} onChange={(e) => handleEditFormChange('weight', e.target.value)} />
+                  </div>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Symptoms</h3>
+                <div className="form-group">
+                  <textarea rows="2" placeholder="List patient's symptoms (comma-separated)..." value={editFormData.symptoms} onChange={(e) => handleEditFormChange('symptoms', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Physical Examination *</h3>
+                <div className="form-group">
+                  <textarea rows="3" placeholder="Enter physical examination findings..." required value={editFormData.examination} onChange={(e) => handleEditFormChange('examination', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Diagnosis *</h3>
+                <div className="form-group">
+                  <textarea rows="2" placeholder="Enter diagnosis..." required value={editFormData.diagnosis} onChange={(e) => handleEditFormChange('diagnosis', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Treatment Plan *</h3>
+                <div className="form-group">
+                  <textarea rows="3" placeholder="Enter treatment plan and recommendations..." required value={editFormData.treatment_plan} onChange={(e) => handleEditFormChange('treatment_plan', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Follow-up</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Follow-up Date</label>
+                    <input type="date" value={editFormData.follow_up_date} onChange={(e) => handleEditFormChange('follow_up_date', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label>Prescription Issued</label>
+                    <select value={editFormData.prescription_issued} onChange={(e) => handleEditFormChange('prescription_issued', e.target.value)}>
+                      <option value="No">No</option>
+                      <option value="Yes">Yes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="form-section">
+                <h3>Additional Notes</h3>
+                <div className="form-group">
+                  <textarea rows="3" placeholder="Any additional notes or observations..." value={editFormData.notes} onChange={(e) => handleEditFormChange('notes', e.target.value)}></textarea>
+                </div>
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn-submit">
+                  <MdEdit size={18} />
+                  Update Consultation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Details Modal */}
       {showDetailsModal && selectedConsultation && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
@@ -558,7 +916,6 @@ const DoctorConsultations = () => {
             </div>
             <div className="details-body">
 
-              {/* ✅ Shared info banner inside details modal */}
               {selectedConsultation.isShared && (
                 <div className="shared-banner-modal">
                   <MdShare size={18} />

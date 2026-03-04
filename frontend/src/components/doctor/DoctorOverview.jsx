@@ -12,7 +12,7 @@ import {
   MdDescription,
   MdVisibility
 } from 'react-icons/md';
-import { FaUserMd, FaStethoscope, FaFileMedical, FaTint } from 'react-icons/fa';
+import { FaUserMd, FaStethoscope, FaFileMedical, FaTint, FaNotesMedical } from 'react-icons/fa';
 import '../../styles/doctor/DoctorOverview.css';
 
 const DoctorOverview = () => {
@@ -87,6 +87,8 @@ const DoctorOverview = () => {
         return MdCheckCircle;
       case 'lab':
         return MdDescription;
+      case 'consultation':
+        return FaNotesMedical
       default:
         return MdCalendarToday;
     }

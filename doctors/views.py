@@ -161,7 +161,7 @@ def doctor_overview(request):
     recent_completed = Appointment.objects.filter(
         doctor=profile, status='completed', updated_at__gte=one_hour_ago
     ).select_related('patient__user').order_by('-updated_at')[:3]
-    
+
     for apt in recent_completed:
         time_diff = now - apt.updated_at
         minutes = int(time_diff.total_seconds() / 60)
@@ -182,6 +182,31 @@ def doctor_overview(request):
             'color': '#10B981'
         })
     
+
+    recent_consultations = ConsultationHistory.objects.filter(
+        doctor=profile, created_at__gte=one_hour_ago
+    ).select_related('patient__user').order_by('-created_at')[:3]
+
+    for cons in recent_consultations:
+        time_diff = now - cons.created_at
+        minutes = int(time_diff.total_seconds() / 60)
+        if minutes < 1:
+            time_ago = "Just now"
+        elif minutes < 60:
+            time_ago = f"{minutes} min ago"
+        else:
+            hours = int(minutes / 60)
+            time_ago = f"{hours} hour ago" if hours == 1 else f"{hours} hours ago"
+        recent_activity.append({
+            'id': f'cons-{cons.id}',
+            'type': 'consultation',
+            'patient': cons.patient.user.get_full_name() or cons.patient.user.username,
+            'action': 'Consultation note created',
+            'time': time_ago,
+            'icon': 'consultation',
+            'color': '#F59E0B'
+        })
+
     recent_activity = sorted(recent_activity, key=lambda x: x['time'])
     
     notifications = []
@@ -979,28 +1004,29 @@ def get_doctor_consultations(request):
                 'prescriptionIssued': 'Yes' if c.prescription_issued else 'No',
                 'followUpDate': c.follow_up_date.isoformat() if c.follow_up_date else None,
                 'notes': c.notes or '',
-                # ✅ Shared metadata
                 'isShared': True,
                 'sharedBy': f"Dr. {sharer_name}",
                 'sharedBySpecialty': record.shared_by.get_specialty_display(),
                 'sharedAt': record.shared_at.strftime('%b %d, %Y'),
                 'sharedMessage': record.message or '',
+                'hasBeenSharedByMe': False,
+                'sharedWithDoctors': [],
             })
 
     else:
-        # ✅ NEW: Get selected date parameter
+        # ✅ Get selected date parameter
         selected_date = request.GET.get('date', timezone.now().date().isoformat())
         
-        # ✅ NEW: Parse selected date
+        # ✅ Parse selected date
         try:
             filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
         except:
             filter_date = timezone.now().date()
         
-        # ✅ UPDATED: Filter by selected date
+        # ✅ Filter by selected date
         consultations = ConsultationHistory.objects.filter(
             doctor=profile,
-            consultation_date=filter_date  # ✅ NEW: Filter by date
+            consultation_date=filter_date
         ).select_related('patient__user', 'appointment')
 
         if type_filter == 'New Visit':
@@ -1025,6 +1051,21 @@ def get_doctor_consultations(request):
             if consultation.weight:         vital_signs['weight']        = consultation.weight
             if consultation.height:         vital_signs['height']        = consultation.height
 
+            # ✅ Check if THIS consultation has been shared BY this doctor
+            shared_with_doctors = SharedConsultation.objects.filter(
+                consultation=consultation,
+                shared_by=profile
+            ).select_related('shared_with__user')
+
+            has_been_shared = shared_with_doctors.exists()
+            shared_doctor_names = []
+            
+            if has_been_shared:
+                shared_doctor_names = [
+                    f"Dr. {sc.shared_with.user.get_full_name() or sc.shared_with.user.username}"
+                    for sc in shared_with_doctors
+                ]
+
             consultations_list.append({
                 'id': consultation.id,
                 'consultationNumber': consultation.consultation_number,
@@ -1044,16 +1085,19 @@ def get_doctor_consultations(request):
                 'prescriptionIssued': 'Yes' if consultation.prescription_issued else 'No',
                 'followUpDate': consultation.follow_up_date.isoformat() if consultation.follow_up_date else None,
                 'notes': consultation.notes or '',
+                # ✅ NOT shared TO me (these are my own)
                 'isShared': False,
                 'sharedBy': None,
                 'sharedBySpecialty': None,
                 'sharedAt': None,
                 'sharedMessage': '',
+                # ✅ Check if I shared it WITH someone
+                'hasBeenSharedByMe': has_been_shared,
+                'sharedWithDoctors': shared_doctor_names,
             })
 
-    # Stats always based on own consultations
+    # ✅ Stats calculation
     if type_filter != 'Shared':
-        # Get the filter_date from earlier
         try:
             selected_date = request.GET.get('date', timezone.now().date().isoformat())
             filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
@@ -1061,11 +1105,10 @@ def get_doctor_consultations(request):
             filter_date = timezone.now().date()
         
         total = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date).count()
-        this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date).count()  # Same as total for selected date
+        this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date).count()
         follow_ups = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date, consultation_type='follow_up').count()
         new_visits = ConsultationHistory.objects.filter(doctor=profile, consultation_date=filter_date, consultation_type='new_visit').count()
     else:
-        # For shared consultations, show all-time stats
         total = ConsultationHistory.objects.filter(doctor=profile).count()
         week_ago = timezone.now().date() - timedelta(days=7)
         this_week = ConsultationHistory.objects.filter(doctor=profile, consultation_date__gte=week_ago).count()
@@ -1153,6 +1196,61 @@ def create_consultation(request):
             "success": True, "message": "Consultation note created successfully",
             "consultation_id": consultation.id, "consultation_number": consultation.consultation_number
         })
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+
+@login_required
+@csrf_protect
+@require_http_methods(["POST"])
+def update_consultation(request, consultation_id):
+    try:
+        profile = request.user.doctorprofile
+    except DoctorProfile.DoesNotExist:
+        return JsonResponse({"error": "Doctor profile not found"}, status=404)
+    
+    try:
+        consultation = ConsultationHistory.objects.get(id=consultation_id, doctor=profile)
+    except ConsultationHistory.DoesNotExist:
+        return JsonResponse({"error": "Consultation not found or you don't have permission"}, status=404)
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Update only editable fields (NOT patient_id or consultation_type)
+        consultation.chief_complaint = data.get('chief_complaint', consultation.chief_complaint)
+        consultation.diagnosis = data.get('diagnosis', consultation.diagnosis)
+        consultation.symptoms = data.get('symptoms', consultation.symptoms)
+        consultation.blood_pressure = data.get('blood_pressure', consultation.blood_pressure)
+        consultation.heart_rate = data.get('heart_rate', consultation.heart_rate)
+        consultation.temperature = data.get('temperature', consultation.temperature)
+        consultation.weight = data.get('weight', consultation.weight)
+        consultation.height = data.get('height', consultation.height)
+        consultation.examination_findings = data.get('examination', consultation.examination_findings)
+        consultation.treatment_plan = data.get('treatment_plan', consultation.treatment_plan)
+        consultation.notes = data.get('notes', consultation.notes)
+        
+        prescription_issued = data.get('prescription_issued', 'No')
+        consultation.prescription_issued = (prescription_issued == 'Yes')
+        
+        follow_up_date = data.get('follow_up_date')
+        if follow_up_date:
+            try:
+                consultation.follow_up_date = timezone.datetime.strptime(follow_up_date, '%Y-%m-%d').date()
+            except:
+                consultation.follow_up_date = None
+        else:
+            consultation.follow_up_date = None
+        
+        consultation.save()
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Consultation updated successfully",
+            "consultation_number": consultation.consultation_number
+        })
+        
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 

@@ -351,8 +351,172 @@ const ConsultationHistory = () => {
             </div>
 
             <div className="details-body">
-              {/* ... REST OF MODAL CONTENT STAYS THE SAME ... */}
-              {/* (Keep all the existing modal content from your original file) */}
+              <div className="details-body">
+                {/* Consultation Information */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <FaNotesMedical size={20} />
+                    <h3>Consultation Information</h3>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Consultation Number:</span>
+                    <span className="detail-value">{selectedConsultation.consultationNumber}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Date & Time:</span>
+                    <span className="detail-value">
+                      {new Date(selectedConsultation.date).toLocaleDateString('en-US', { 
+                        month: 'long', 
+                        day: 'numeric', 
+                        year: 'numeric' 
+                      })} at {selectedConsultation.time}
+                    </span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Type:</span>
+                    <span className={`type-badge ${selectedConsultation.type.toLowerCase().replace(' ', '-')}`}>
+                      {selectedConsultation.type}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Doctor Information */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <FaUserMd size={20} />
+                    <h3>Doctor Information</h3>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Doctor:</span>
+                    <span className="detail-value">{selectedConsultation.doctorName}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Specialty:</span>
+                    <span className="detail-value">{selectedConsultation.specialty}</span>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Hospital:</span>
+                    <span className="detail-value">{selectedConsultation.hospitalName}</span>
+                  </div>
+                </div>
+
+                {/* Chief Complaint */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <MdInfo size={20} />
+                    <h3>Chief Complaint</h3>
+                  </div>
+                  <div className="info-box">
+                    {selectedConsultation.chiefComplaint}
+                  </div>
+                </div>
+
+                {/* Vital Signs */}
+                {selectedConsultation.vitalSigns && Object.keys(selectedConsultation.vitalSigns).length > 0 && (
+                  <div className="details-section">
+                    <div className="section-header-small">
+                      <FaStethoscope size={20} />
+                      <h3>Vital Signs</h3>
+                    </div>
+                    <div className="vitals-grid">
+                      {Object.entries(selectedConsultation.vitalSigns).map(([key, value]) => (
+                        <div key={key} className="vital-item">
+                          <span className="vital-label">
+                            {key.replace(/([A-Z])/g, ' $1').trim()}:
+                          </span>
+                          <span className="vital-value">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Symptoms */}
+                {selectedConsultation.symptoms && selectedConsultation.symptoms.length > 0 && (
+                  <div className="details-section">
+                    <div className="section-header-small">
+                      <MdInfo size={20} />
+                      <h3>Symptoms</h3>
+                    </div>
+                    <div className="symptoms-tags">
+                      {selectedConsultation.symptoms.map((symptom, index) => (
+                        <span key={index} className="symptom-tag">{symptom}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Physical Examination */}
+                {selectedConsultation.examination && (
+                  <div className="details-section">
+                    <div className="section-header-small">
+                      <FaStethoscope size={20} />
+                      <h3>Physical Examination</h3>
+                    </div>
+                    <div className="info-box">
+                      {selectedConsultation.examination}
+                    </div>
+                  </div>
+                )}
+
+                {/* Diagnosis */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <FaFileMedical size={20} />
+                    <h3>Diagnosis</h3>
+                  </div>
+                  <div className="diagnosis-box">
+                    {selectedConsultation.diagnosis}
+                  </div>
+                </div>
+
+                {/* Treatment Plan */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <MdLocalHospital size={20} />
+                    <h3>Treatment Plan</h3>
+                  </div>
+                  <div className="info-box">
+                    {selectedConsultation.treatmentPlan}
+                  </div>
+                </div>
+
+                {/* Follow-up & Notes */}
+                <div className="details-section">
+                  <div className="section-header-small">
+                    <MdCalendarToday size={20} />
+                    <h3>Follow-up & Notes</h3>
+                  </div>
+                  <div className="detail-row">
+                    <span className="detail-label">Prescription Issued:</span>
+                    <span className="detail-value">
+                      {selectedConsultation.prescriptionIssued === 'Yes' ? (
+                        <span style={{ color: '#10B981', fontWeight: '700' }}>✓ Yes</span>
+                      ) : (
+                        <span style={{ color: '#6B7280' }}>No</span>
+                      )}
+                    </span>
+                  </div>
+                  {selectedConsultation.followUpDate && (
+                    <div className="detail-row">
+                      <span className="detail-label">Follow-up Date:</span>
+                      <span className="detail-value">
+                        {new Date(selectedConsultation.followUpDate).toLocaleDateString('en-US', { 
+                          month: 'long', 
+                          day: 'numeric', 
+                          year: 'numeric' 
+                        })}
+                      </span>
+                    </div>
+                  )}
+                  {selectedConsultation.notes && (
+                    <div className="notes-box-detail">
+                      <strong>Additional Notes:</strong>
+                      <p>{selectedConsultation.notes}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

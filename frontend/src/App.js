@@ -6,6 +6,7 @@ import SignupForm from "./components/SignupForm";
 import PatientPage from "./components/PatientPage";
 import DoctorPage from "./components/DoctorPage";
 import StaffPage from "./components/StaffPage";
+import PharmacyPage from "./components/PharmacyPage";
 import ForgotPassword from "./components/ForgotPassword";
 import ResetPassword from "./components/ResetPassword";
 
@@ -34,6 +35,9 @@ import StaffOverview from "./components/staff/StaffOverview";
 import StaffUpload from "./components/staff/StaffUpload";
 import StaffLabReports from "./components/staff/StaffLabReports";
 import StaffProfile from "./components/staff/StaffProfile";
+
+
+import PharmacyOverview from "./components/pharmacy/PharmacyOverview";
 
 function App() {
   return (
@@ -78,6 +82,11 @@ function App() {
           <Route path="upload" element={<StaffUpload />} />
           <Route path="reports" element={<StaffLabReports />} />
           <Route path="profile" element={<StaffProfile />} />
+        </Route>
+
+        <Route path="/pharmacy" element={<PharmacyPage />}>
+          <Route index element={<Navigate to="overview" replace />} />
+          <Route path="overview" element={<PharmacyOverview />} />
         </Route>
 
       </Routes>

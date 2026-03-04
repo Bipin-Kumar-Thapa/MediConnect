@@ -232,7 +232,7 @@ class ConsultationHistory(models.Model):
     ]
     
     consultation_number = models.CharField(max_length=50, unique=True, editable=False)
-    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='consultation_history', null=True, blank=True)
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='consultation_histories', null=True, blank=True)
     patient = models.ForeignKey('patients.PatientProfile', on_delete=models.CASCADE, related_name='consultation_histories')
     doctor = models.ForeignKey(DoctorProfile, on_delete=models.CASCADE, related_name='consultation_histories')
     

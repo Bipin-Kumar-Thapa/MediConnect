@@ -23,6 +23,7 @@ urlpatterns = [
     path('consultations/create/', views.create_consultation, name='create-consultation'),
     path('consultations/<int:consultation_id>/share/', views.share_consultation, name='share-consultation'),
     path('doctors/list/', views.get_doctors_list_for_share, name='doctors-list-for-share'),
+    path('consultations/<int:consultation_id>/update/', views.update_consultation, name='update_consultation'),
 
     path('schedule/', views.get_doctor_schedule, name='schedule'),
     path('schedule/add-slot/', views.add_time_slot, name='add-slot'),

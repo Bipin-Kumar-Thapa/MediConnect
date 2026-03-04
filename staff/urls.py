@@ -16,4 +16,5 @@ urlpatterns = [
     
     path('lab-reports/',views.get_staff_lab_reports,name='staff_lab_reports'),
     path('lab-reports/<int:report_id>/edit/',views.edit_lab_report,name='staff_edit_report'),
+
 ]
