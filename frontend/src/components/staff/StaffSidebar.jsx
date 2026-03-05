@@ -65,34 +65,47 @@ const StaffSidebar = () => {
   };
 
   const handleLogout = async () => {
-    if (!window.confirm('Are you sure you want to logout?')) return;
-    setLoggingOut(true);
-    try {
-      // Get CSRF token from cookie
-      const csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
+    if (window.confirm('Are you sure you want to logout?')) {
+      try {
+        const getCookie = (name) => {
+          let cookieValue = null;
+          if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+              const cookie = cookies[i].trim();
+              if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+              }
+            }
+          }
+          return cookieValue;
+        };
 
-      const response = await fetch('http://localhost:8000/staff/logout/', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken || '',
-        },
-      });
-      const data = await response.json();
-      if (data.success) {
+        await fetch('http://localhost:8000/staff/logout/', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+          }
+        });
+
+        // ✅ Clear login state
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userName');
+
         navigate('/login');
-      } else {
-        alert('Logout failed. Please try again.');
+      } catch (error) {
+        console.error('Logout error:', error);
+        
+        // ✅ Clear login state even on error
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userName');
+        
+        navigate('/login');
       }
-    } catch (error) {
-      console.error('Logout error:', error);
-      navigate('/login');
-    } finally {
-      setLoggingOut(false);
     }
   };
 

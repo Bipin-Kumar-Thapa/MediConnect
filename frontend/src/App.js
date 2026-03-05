@@ -36,8 +36,11 @@ import StaffUpload from "./components/staff/StaffUpload";
 import StaffLabReports from "./components/staff/StaffLabReports";
 import StaffProfile from "./components/staff/StaffProfile";
 
-
+//Pharmacy Pages
 import PharmacyOverview from "./components/pharmacy/PharmacyOverview";
+import PharmacyPrescriptions from "./components/pharmacy/PharmacyPrescriptions";
+import PharmacyRequests from "./components/pharmacy/PharmacyRequests";
+import PharmacyStock from "./components/pharmacy/PharmacyStock";
 
 function App() {
   return (
@@ -84,9 +87,13 @@ function App() {
           <Route path="profile" element={<StaffProfile />} />
         </Route>
 
+        {/* PHARMACY ROUTES */} 
         <Route path="/pharmacy" element={<PharmacyPage />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<PharmacyOverview />} />
+          <Route path="prescriptions" element={<PharmacyPrescriptions />} />
+          <Route path="requests" element={<PharmacyRequests />} />
+          <Route path="stock" element={<PharmacyStock />} />
         </Route>
 
       </Routes>

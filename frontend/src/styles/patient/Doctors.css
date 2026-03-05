@@ -760,6 +760,62 @@
   color: white;
 }
 
+.btn-book-appointment-card {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.btn-book-appointment-card:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-book-appointment-card:active {
+  transform: translateY(0);
+}
+
+/* ✅ Update Footer to Stack Buttons */
+.doctor-card-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* ✅ Adjust View Details Button Width */
+.btn-view-details {
+  width: 100%;
+  padding: 10px;
+  background: white;
+  color: #6366f1;
+  border: 2px solid #6366f1;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-view-details:hover {
+  background: #6366f1;
+  color: white;
+}
+
 /* ─────────────────────────────────────────────
    Responsive Adjustments
    ───────────────────────────────────────────── */

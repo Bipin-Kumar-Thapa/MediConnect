@@ -393,8 +393,18 @@ def get_staff_lab_reports(request):
     page         = int(request.GET.get('page', 1))
     per_page     = 10
 
+    selected_date = request.GET.get('date', timezone.now().date().isoformat())
+    
+    # ✅ Parse selected date
+    try:
+        filter_date = timezone.datetime.strptime(selected_date, '%Y-%m-%d').date()
+    except:
+        filter_date = timezone.now().date()
+
+
     reports = LabReport.objects.filter(
-        uploaded_by=profile
+        uploaded_by=profile,
+        test_date=filter_date
     ).select_related('patient__user', 'doctor__user').prefetch_related('attachments').order_by('-created_at')
 
     # Search
@@ -421,7 +431,7 @@ def get_staff_lab_reports(request):
         reports = reports.filter(is_completed=False)
 
     # Stats
-    all_mine = LabReport.objects.filter(uploaded_by=profile)
+    all_mine = LabReport.objects.filter(uploaded_by=profile, test_date=filter_date)
     stats = {
         'total':     all_mine.count(),
         'normal':    all_mine.filter(overall_status='normal').count(),
@@ -760,3 +770,144 @@ def search_patients(request):
             "gender": p.get_gender_display_short() if hasattr(p, 'get_gender_display_short') else (p.gender or "N/A"),
         } for p in patients]
     })
+
+
+
+@login_required
+def get_staff_profile_data(request):
+    """Get staff profile information"""
+    profile, error = get_staff_profile(request)
+    if error:
+        return error
+    
+    # Calculate stats
+    total_reports = LabReport.objects.filter(uploaded_by=profile).count()
+    
+    now = timezone.now()
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_reports = LabReport.objects.filter(
+        uploaded_by=profile,
+        created_at__gte=start_of_month
+    ).count()
+    
+    start_of_week = now - timezone.timedelta(days=now.weekday())
+    week_reports = LabReport.objects.filter(
+        uploaded_by=profile,
+        created_at__gte=start_of_week
+    ).count()
+    
+    accuracy_rate = "98.5%"
+    member_since = profile.created_at.strftime('%B %d, %Y')
+    
+    return JsonResponse({
+        'firstName': request.user.first_name or '',
+        'lastName': request.user.last_name or '',
+        'email': request.user.email,
+        'phone': profile.phone_number or '',
+        'role': profile.role or 'Lab Technician',
+        'department': profile.department or 'Laboratory Services',
+        'employeeId': profile.staff_id,
+        'dateOfJoining': member_since,
+        'shift': profile.shift or 'Not assigned',
+        'specialization': profile.specialization or '',
+        'certification': profile.certification or '',
+        'yearsOfExperience': str(profile.years_of_experience) if profile.years_of_experience else '0',
+        'stats': {
+            'total': total_reports,
+            'month': month_reports,
+            'week': week_reports,
+            'accuracy': accuracy_rate
+        }
+    })
+
+
+@login_required
+def get_staff_recent_activity_data(request):
+    """Get recent activity for staff member - TODAY ONLY"""
+    profile, error = get_staff_profile(request)
+    if error:
+        return error
+    
+    # ✅ CHANGED: Filter only today's reports
+    today = timezone.now().date()
+    
+    recent_reports = LabReport.objects.filter(
+        uploaded_by=profile,
+        created_at__date=today  # ✅ Only today's reports
+    ).select_related('patient__user').order_by('-created_at')[:10]
+    
+    activity_list = []
+    now = timezone.now()
+    
+    for report in recent_reports:
+        time_diff = now - report.created_at
+        
+        # ✅ Calculate time ago (only hours/minutes since it's today)
+        hours = int(time_diff.seconds / 3600)
+        if hours > 0:
+            time_ago = f"{hours} hour{'s' if hours > 1 else ''} ago"
+        else:
+            minutes = int(time_diff.seconds / 60)
+            time_ago = f"{minutes} minute{'s' if minutes > 1 else ''} ago" if minutes > 0 else "Just now"
+        
+        # Get test name
+        test_sections = report.test_sections.all()
+        if test_sections.exists():
+            test_name = test_sections.first().get_test_name() if test_sections.count() == 1 else f"{test_sections.count()} Tests"
+        else:
+            test_name = "Lab Report"
+        
+        patient_name = report.patient.user.get_full_name() or report.patient.user.username
+        
+        activity_list.append({
+            'action': f'Uploaded {test_name}',
+            'id': report.report_number,
+            'patient': patient_name,
+            'time': time_ago
+        })
+    
+    return JsonResponse({'activities': activity_list})
+
+
+@login_required
+@csrf_protect
+@require_http_methods(["POST"])
+def update_staff_profile_data(request):
+    """Update staff profile information"""
+    profile, error = get_staff_profile(request)
+    if error:
+        return error
+    
+    try:
+        data = _json.loads(request.body)
+        
+        # Update user fields
+        request.user.first_name = data.get('firstName', '')
+        request.user.last_name = data.get('lastName', '')
+        request.user.email = data.get('email', '')
+        request.user.save()
+        
+        # Update profile fields
+        profile.phone_number = data.get('phone', '')
+        profile.role = data.get('role', '')
+        profile.department = data.get('department', '')
+        profile.specialization = data.get('specialization', '')
+        profile.certification = data.get('certification', '')
+        profile.shift = data.get('shift', '')
+        
+        years = data.get('yearsOfExperience', '')
+        if years:
+            try:
+                profile.years_of_experience = int(years)
+            except:
+                pass
+        
+        profile.save()
+        
+        return JsonResponse({
+            "success": True,
+            "message": "Profile updated successfully"
+        })
+        
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

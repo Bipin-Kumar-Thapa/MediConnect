@@ -256,6 +256,15 @@ const Doctors = () => {
                 >
                   View Details
                 </button>
+                <button 
+                  className="btn-book-appointment-card"
+                  onClick={() => {
+                    navigate(`/patient/appointments?doctor=${doctor.id}&specialty=${doctor.specialtyCode}`);
+                  }}
+                >
+                  <MdCalendarToday size={18} />
+                  Book Appointment
+                </button>
               </div>
             </div>
           ))

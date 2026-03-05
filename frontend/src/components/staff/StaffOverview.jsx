@@ -16,35 +16,65 @@ import { FaFlask, FaUserMd } from 'react-icons/fa';
 import '../../styles/staff/StaffOverview.css';
 
 const StaffOverview = () => {
-  const navigate   = useNavigate();
-  const location   = useLocation();
-  const [data, setData]       = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [highlightId, setHighlightId] = useState(null);
   const highlightRef = useRef(null);
 
   useEffect(() => {
-    fetch('http://localhost:8000/staff/overview/', { credentials: 'include' })
-      .then(res => res.json())
-      .then(json => {
-        setData(json);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    fetchData();
   }, []);
 
-  // Handle highlight from navigation (e.g. from reports page)
+  const fetchData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/staff/overview/', { 
+        credentials: 'include' 
+      });
+
+      // ✅ Check if unauthorized
+      if (response.status === 401 || response.status === 403) {
+        navigate('/login');
+        return;
+      }
+
+      if (!response.ok) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
+
+      const json = await response.json();
+      
+      // ✅ Check if data is valid
+      if (json && json.stats) {
+        setData(json);
+        setError(false);
+      } else {
+        setError(true);
+      }
+    } catch (err) {
+      console.error('Error fetching overview:', err);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle highlight from navigation
   useEffect(() => {
+    if (!data) return;
+
     const params = new URLSearchParams(location.search);
     const id = params.get('highlight');
     if (id) {
       setHighlightId(Number(id));
-      // Scroll to highlighted row after render
       setTimeout(() => {
         if (highlightRef.current) {
           highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
-        // Remove highlight after 3s
         setTimeout(() => setHighlightId(null), 3000);
       }, 300);
     }
@@ -67,39 +97,70 @@ const StaffOverview = () => {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
 
-  if (loading) return <div className="sov-page">Loading...</div>;
-  if (!data)   return <div className="sov-page">Error loading overview.</div>;
+  // ✅ Loading state
+  if (loading) {
+    return (
+      <div className="sov-page">
+        <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
+      </div>
+    );
+  }
 
-  const { stats, recent_reports, staff_name } = data;
+  // ✅ Error state
+  if (error || !data || !data.stats) {
+    return (
+      <div className="sov-page">
+        <div style={{ textAlign: 'center', padding: '40px' }}>
+          <p>Error loading overview.</p>
+          <button 
+            onClick={() => navigate('/login')}
+            style={{
+              marginTop: '20px',
+              padding: '10px 20px',
+              background: '#6366f1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer'
+            }}
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { stats, recent_reports = [], staff_name } = data;
 
   const statCards = [
     {
       label: 'Total Reports',
-      value: stats.total_reports,
+      value: stats.total_reports || 0,
       icon: <FaFlask />,
       color: 'blue',
-      sub: `+${stats.week_reports} this week`
+      sub: `+${stats.week_reports || 0} this week`
     },
     {
       label: 'Uploaded Today',
-      value: stats.today_reports,
+      value: stats.today_reports || 0,
       icon: <MdUpload />,
       color: 'purple',
-      sub: stats.today_date
+      sub: stats.today_date || 'Today'
     },
     {
       label: 'This Week',
-      value: stats.week_reports,
+      value: stats.week_reports || 0,
       icon: <MdTrendingUp />,
       color: 'green',
       sub: 'Last 7 days'
     },
     {
       label: 'Critical Reports',
-      value: stats.critical_reports,
+      value: stats.critical_reports || 0,
       icon: <MdError />,
       color: 'orange',
-      sub: stats.critical_reports > 0 ? 'Needs attention' : 'All clear'
+      sub: (stats.critical_reports || 0) > 0 ? 'Needs attention' : 'All clear'
     }
   ];
 

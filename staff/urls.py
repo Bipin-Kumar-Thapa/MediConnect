@@ -17,4 +17,8 @@ urlpatterns = [
     path('lab-reports/',views.get_staff_lab_reports,name='staff_lab_reports'),
     path('lab-reports/<int:report_id>/edit/',views.edit_lab_report,name='staff_edit_report'),
 
+    path('profile/data/', views.get_staff_profile_data, name='get_staff_profile_data'),
+    path('profile/update/', views.update_staff_profile_data, name='update_staff_profile_data'),
+    path('profile/activity/', views.get_staff_recent_activity_data, name='get_staff_recent_activity_data'),
+
 ]

@@ -32,6 +32,7 @@ const StaffLabReports = () => {
   const [savingEdit, setSavingEdit]         = useState(false);
   const [editError, setEditError]           = useState('');
   const [editSuccess, setEditSuccess]       = useState('');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Edit form state
   const [editPatients, setEditPatients]         = useState([]);
@@ -48,7 +49,7 @@ const StaffLabReports = () => {
   const highlightRef = useRef(null);
   const filters = ['All','Normal','Abnormal','Critical','Completed','Pending'];
 
-  useEffect(() => { fetchReports(); }, [currentPage, search, activeFilter]);
+  useEffect(() => { fetchReports(); }, [currentPage, search, activeFilter, selectedDate]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -65,7 +66,7 @@ const StaffLabReports = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page:currentPage, filter:activeFilter, search });
+      const params = new URLSearchParams({ page:currentPage, filter:activeFilter, search, date: selectedDate });
       const res = await fetch(`http://localhost:8000/staff/lab-reports/?${params}`, { credentials:'include' });
       const data = await res.json();
       setReports(data.reports || []);
@@ -77,6 +78,7 @@ const StaffLabReports = () => {
 
   const onSearch = (e) => { setSearch(e.target.value); setCurrentPage(1); };
   const onFilter = (f)  => { setActiveFilter(f); setCurrentPage(1); };
+  const onDateChange = (e) => {setSelectedDate(e.target.value);setCurrentPage(1);};
   const onPage   = (p)  => { setCurrentPage(p); window.scrollTo({ top:0, behavior:'smooth' }); };
 
   // Helper: Get test names from sections
@@ -402,6 +404,38 @@ const StaffLabReports = () => {
       {/* HEADER */}
       <div className="slr-header">
         <div><h1>Lab Reports</h1><p>Manage all uploaded lab reports</p></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: 'auto', }}>
+          {/* ✅ ADD DATE PICKER */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '8px', 
+            padding: '8px 16px', 
+            background: 'white', 
+            borderRadius: '12px', 
+            border: '2px solid #e5e7eb',
+            fontSize: '14px',
+            fontWeight: '500',
+            color: '#374151'
+          }}>
+            <MdCalendarToday size={18} style={{ color: '#6366f1' }} />
+            <input 
+              type="date" 
+              value={selectedDate}
+              onChange={onDateChange}
+              style={{
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontFamily: 'inherit',
+                fontSize: 'inherit',
+                fontWeight: 'inherit',
+                color: 'inherit',
+                cursor: 'pointer'
+              }}
+            />
+          </div>
+        </div>
         <button className="slr-upload-btn" onClick={() => navigate('/staff/upload')}>
           <MdUpload /> Upload Report
         </button>

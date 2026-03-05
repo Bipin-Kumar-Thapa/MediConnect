@@ -1,10 +1,3 @@
-/* ============================================
-   PHARMACY DASHBOARD - 100% ISOLATED
-   All styles wrapped in .pharmacy-dashboard-wrapper
-   Prefix: phd-
-   WILL NOT AFFECT ANY OTHER PAGE
-   ============================================ */
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
 /* ===== WRAPPER ===== */
@@ -712,6 +705,47 @@
   .pharmacy-dashboard-wrapper .phd-notif-message {
     font-size: 12px;
   }
+}
+
+/* ✅ Period Filter */
+.phd-period-filter {
+  display: flex;
+  gap: 8px;
+  background: white;
+  padding: 4px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.phd-period-btn {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.phd-period-btn:hover {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.phd-period-btn--active {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+/* ✅ Stat Info (for neutral changes) */
+.phd-stat-info {
+  font-size: 11px;
+  color: #6b7280;
+  text-align: center;
+  margin-top: 4px;
 }
 
 @media (max-width: 480px) {

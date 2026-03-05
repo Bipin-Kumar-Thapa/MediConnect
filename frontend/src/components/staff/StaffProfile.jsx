@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MdEdit,
@@ -23,55 +23,130 @@ const StaffProfile = () => {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const [profileData, setProfileData] = useState({
-    firstName: 'John',
-    lastName: 'Smith',
-    email: 'john.smith@mediconnect.com',
-    phone: '+1 (555) 123-4567',
-    role: 'Lab Technician',
-    department: 'Laboratory Services',
-    employeeId: 'STAFF-2024-001',
-    dateOfJoining: 'January 15, 2024',
-    shift: 'Morning (8:00 AM - 4:00 PM)',
-    specialization: 'Clinical Chemistry & Hematology',
-    certification: 'Medical Laboratory Scientist (MLS)',
-    yearsOfExperience: '5 years'
-  });
+  const [profileData, setProfileData] = useState(null);
+  const [formData, setFormData] = useState(null);
+  const [recentActivity, setRecentActivity] = useState([]);
 
-  const [formData, setFormData] = useState(profileData);
+  // Fetch profile data on mount
+  useEffect(() => {
+    fetchProfileData();
+    fetchRecentActivity();
+  }, []);
 
-  const stats = [
-    { label: 'Total Reports', value: '127', icon: <FaFlask />, color: 'blue' },
-    { label: 'This Month', value: '43', icon: <MdBarChart />, color: 'green' },
-    { label: 'This Week', value: '12', icon: <MdTrendingUp />, color: 'purple' },
-    { label: 'Accuracy Rate', value: '98.5%', icon: <MdCheckCircle />, color: 'teal' }
-  ];
+  const fetchProfileData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/staff/profile/data/', {
+        credentials: 'include'
+      });
 
+      if (response.ok) {
+        const data = await response.json();
+        setProfileData(data);
+        setFormData(data);
+      } else {
+        console.error('Failed to fetch profile data');
+      }
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      setLoading(false);
+    }
+  };
 
+  const fetchRecentActivity = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/staff/profile/activity/', {
+        credentials: 'include'
+      });
 
-  const recentActivity = [
-    { action: 'Uploaded Lab Report', id: 'LAB-127', time: '2 hours ago' },
-    { action: 'Completed Blood Test', id: 'LAB-126', time: '4 hours ago' },
-    { action: 'Updated Patient Record', id: 'PAT-003', time: '1 day ago' },
-    { action: 'Uploaded Lab Report', id: 'LAB-125', time: '2 days ago' }
-  ];
+      if (response.ok) {
+        const data = await response.json();
+        setRecentActivity(data.activities);
+      }
+    } catch (error) {
+      console.error('Error fetching activity:', error);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSave = () => {
-    setProfileData(formData);
-    setIsEditing(false);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 3000);
+  const handleSave = async () => {
+    try {
+      // ✅ Get CSRF token
+      const getCookie = (name) => {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+              cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+              break;
+            }
+          }
+        }
+        return cookieValue;
+      };
+
+      const csrftoken = getCookie('csrftoken');
+
+      const response = await fetch('http://localhost:8000/staff/profile/update/', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrftoken,  // ✅ ADD CSRF TOKEN
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (response.ok) {
+        setProfileData(formData);
+        setIsEditing(false);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('An error occurred while updating profile');
+    }
   };
 
   const handleCancel = () => {
     setFormData(profileData);
     setIsEditing(false);
   };
+
+  if (loading || !profileData) {
+    return (
+      <div className="spr-page">
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '400px',
+          fontSize: '18px',
+          color: '#6B7280'
+        }}>
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  const stats = [
+    { label: 'Total Reports', value: profileData.stats.total, icon: <FaFlask />, color: 'blue' },
+    { label: 'This Month', value: profileData.stats.month, icon: <MdBarChart />, color: 'green' },
+    { label: 'This Week', value: profileData.stats.week, icon: <MdTrendingUp />, color: 'purple' },
+    { label: 'Accuracy Rate', value: profileData.stats.accuracy, icon: <MdCheckCircle />, color: 'teal' }
+  ];
 
   return (
     <div className="spr-page">
@@ -112,7 +187,7 @@ const StaffProfile = () => {
       <div className="spr-profile-card">
         <div className="spr-profile-header">
           <div className="spr-avatar-large">
-            {profileData.firstName[0]}{profileData.lastName[0]}
+            {profileData.firstName?.[0] || 'S'}{profileData.lastName?.[0] || 'T'}
           </div>
           <div className="spr-profile-info">
             <h2>{profileData.firstName} {profileData.lastName}</h2>
@@ -213,7 +288,7 @@ const StaffProfile = () => {
                     onChange={handleChange}
                   />
                 ) : (
-                  <p>{profileData.phone}</p>
+                  <p>{profileData.phone || 'Not provided'}</p>
                 )}
               </div>
             </div>
@@ -266,7 +341,7 @@ const StaffProfile = () => {
                     onChange={handleChange}
                   />
                 ) : (
-                  <p>{profileData.specialization}</p>
+                  <p>{profileData.specialization || 'Not specified'}</p>
                 )}
               </div>
 
@@ -280,7 +355,7 @@ const StaffProfile = () => {
                     onChange={handleChange}
                   />
                 ) : (
-                  <p>{profileData.certification}</p>
+                  <p>{profileData.certification || 'Not specified'}</p>
                 )}
               </div>
 
@@ -291,7 +366,17 @@ const StaffProfile = () => {
                 </div>
                 <div className="spr-field">
                   <label><MdAccessTime /> Experience</label>
-                  <p>{profileData.yearsOfExperience}</p>
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      name="yearsOfExperience"
+                      value={formData.yearsOfExperience}
+                      onChange={handleChange}
+                      placeholder="e.g., 5"
+                    />
+                  ) : (
+                    <p>{profileData.yearsOfExperience} years</p>
+                  )}
                 </div>
               </div>
 
@@ -303,6 +388,7 @@ const StaffProfile = () => {
                     name="shift"
                     value={formData.shift}
                     onChange={handleChange}
+                    placeholder="e.g., Morning (8:00 AM - 4:00 PM)"
                   />
                 ) : (
                   <p>{profileData.shift}</p>
@@ -325,20 +411,32 @@ const StaffProfile = () => {
               <h3>Recent Activity</h3>
             </div>
             <div className="spr-card-body">
-              <div className="spr-activity-list">
-                {recentActivity.map((activity, i) => (
-                  <div key={i} className="spr-activity-item">
-                    <div className="spr-activity-dot" />
-                    <div className="spr-activity-info">
-                      <p className="spr-activity-action">{activity.action}</p>
-                      <div className="spr-activity-meta">
-                        <code className="spr-activity-id">{activity.id}</code>
-                        <span className="spr-activity-time">{activity.time}</span>
+              {recentActivity.length === 0 ? (
+                <p style={{ 
+                  textAlign: 'center', 
+                  color: '#9CA3AF', 
+                  padding: '40px 20px',
+                  fontSize: '14px'
+                }}>
+                  No recent activity
+                </p>
+              ) : (
+                <div className="spr-activity-list">
+                  {recentActivity.map((activity, i) => (
+                    <div key={i} className="spr-activity-item">
+                      <div className="spr-activity-dot" />
+                      <div className="spr-activity-info">
+                        <p className="spr-activity-action">{activity.action}</p>
+                        <div className="spr-activity-meta">
+                          <code className="spr-activity-id">{activity.id}</code>
+                          {activity.patient && <span> • {activity.patient}</span>}
+                          <span className="spr-activity-time"> • {activity.time}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

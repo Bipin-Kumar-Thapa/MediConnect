@@ -82,27 +82,46 @@ const DoctorSidebar = () => {
   };
 
   const handleLogout = async () => {
-    const confirmLogout = window.confirm('Are you sure you want to logout?');
-    if (confirmLogout) {
+    if (window.confirm('Are you sure you want to logout?')) {
       try {
-        const response = await fetch('http://localhost:8000/doctor/logout/', {
+        const getCookie = (name) => {
+          let cookieValue = null;
+          if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+              const cookie = cookies[i].trim();
+              if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+              }
+            }
+          }
+          return cookieValue;
+        };
+
+        await fetch('http://localhost:8000/doctor/logout/', {
           method: 'POST',
           credentials: 'include',
           headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': getCSRFToken(),
+            'X-CSRFToken': getCookie('csrftoken'),
           }
         });
 
-        if (response.ok) {
-          localStorage.clear();
-          navigate('/login');
-        } else {
-          alert('Logout failed. Please try again.');
-        }
+        // ✅ Clear login state
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userName');
+
+        navigate('/login');
       } catch (error) {
         console.error('Logout error:', error);
-        alert('An error occurred during logout');
+        
+        // ✅ Clear login state even on error
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('userName');
+        
+        navigate('/login');
       }
     }
   };

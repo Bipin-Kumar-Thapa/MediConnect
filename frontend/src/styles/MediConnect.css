@@ -920,6 +920,33 @@ body {
   color: #33d1d1;
 }
 
+/* ✅ Dashboard Button */
+.dashboard-btn {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #00c3a5 0%, #0097c2 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-btn:hover {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+}
+
+.dashboard-btn:active {
+  transform: translateY(0);
+}
+
 
 
 /* ========================================= */

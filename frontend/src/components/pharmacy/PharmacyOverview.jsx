@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MdDashboard,
@@ -21,113 +21,81 @@ import '../../styles/pharmacy/PharmacyOverview.css';
 const PharmacyOverview = () => {
   const navigate = useNavigate();
 
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState('today');
+
+  useEffect(() => {
+    fetchOverviewData();
+  }, [selectedPeriod]);
+
+  const fetchOverviewData = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(
+        `http://localhost:8000/pharmacy/overview/?period=${selectedPeriod}`,
+        { credentials: 'include' }
+      );
+      if (response.ok) {
+        const result = await response.json();
+        setData(result);
+      }
+    } catch (error) {
+      console.error('Error fetching overview data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !data) {
+    return (
+      <div className="pharmacy-dashboard-wrapper">
+        <div className="phd-page">
+          <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
   const stats = [
     {
-      label: 'Prescriptions Today',
-      value: '42',
+      label: `Prescriptions ${data.period_label}`,
+      value: data.stats.prescriptions,
       icon: <MdDescription />,
       color: 'green',
-      change: '+12%',
-      trend: 'up'
+      change: data.stats.prescriptions_change,
+      trend: data.stats.prescriptions_change.startsWith('+') ? 'up' : 'down'
     },
     {
       label: 'Total Medicines',
-      value: '156',
+      value: data.stats.total_medicines,
       icon: <MdInventory />,
       color: 'blue',
-      change: '+5',
-      trend: 'up'
+      change: 'In Stock',
+      trend: 'neutral'
     },
     {
       label: 'Low Stock Items',
-      value: '8',
+      value: data.stats.low_stock,
       icon: <MdWarning />,
       color: 'orange',
-      change: '+3',
-      trend: 'up'
+      change: 'Need Reorder',
+      trend: 'neutral'
     },
     {
       label: 'Pending Requests',
-      value: '3',
+      value: data.stats.pending_requests,
       icon: <MdNotifications />,
       color: 'red',
-      change: '-2',
-      trend: 'down'
-    }
-  ];
-
-  const recentPrescriptions = [
-    {
-      id: 'PRSC-127',
-      patient: 'John Doe',
-      patientId: 'PAT-001',
-      doctor: 'Dr. Sarah Mitchell',
-      date: 'Feb 19, 2026',
-      time: '10:30 AM',
-      status: 'Pending',
-      medicines: 2
-    },
-    {
-      id: 'PRSC-126',
-      patient: 'Sarah Williams',
-      patientId: 'PAT-002',
-      doctor: 'Dr. James Rodriguez',
-      date: 'Feb 19, 2026',
-      time: '09:15 AM',
-      status: 'Fulfilled',
-      medicines: 1
-    },
-    {
-      id: 'PRSC-125',
-      patient: 'Michael Brown',
-      patientId: 'PAT-003',
-      doctor: 'Dr. Emily Chen',
-      date: 'Feb 19, 2026',
-      time: '08:45 AM',
-      status: 'Fulfilled',
-      medicines: 3
-    }
-  ];
-
-  const lowStockMedicines = [
-    { name: 'Paracetamol 500mg', stock: 10, unit: 'tablets', level: 'critical' },
-    { name: 'Amoxicillin 250mg', stock: 28, unit: 'capsules', level: 'low' },
-    { name: 'Ibuprofen 400mg', stock: 35, unit: 'tablets', level: 'low' }
-  ];
-
-  const notifications = [
-    {
-      id: 1,
-      type: 'warning',
-      title: 'Low Stock Alert',
-      message: 'Paracetamol 500mg is running low (10 tablets remaining)',
-      time: '5 minutes ago'
-    },
-    {
-      id: 2,
-      type: 'info',
-      title: 'New Prescription',
-      message: 'New prescription PRSC-127 from Dr. Sarah Mitchell',
-      time: '15 minutes ago'
-    },
-    {
-      id: 3,
-      type: 'success',
-      title: 'Request Fulfilled',
-      message: 'Patient request REQ-042 has been delivered',
-      time: '1 hour ago'
-    },
-    {
-      id: 4,
-      type: 'warning',
-      title: 'Expiry Alert',
-      message: '3 medicines expiring in the next 30 days',
-      time: '2 hours ago'
+      change: 'Active',
+      trend: 'neutral'
     }
   ];
 
   const getStatusBadgeClass = (status) => {
-    return status === 'Pending' ? 'phd-badge--yellow' : 'phd-badge--green';
+    const statusLower = status.toLowerCase();
+    if (statusLower === 'active' || statusLower === 'pending') return 'phd-badge--yellow';
+    return 'phd-badge--green';
   };
 
   const getStockLevelClass = (level) => {
@@ -156,11 +124,33 @@ const PharmacyOverview = () => {
     <div className="pharmacy-dashboard-wrapper">
       <div className="phd-page">
 
-        {/* Header */}
+        {/* Header with Period Filter */}
         <div className="phd-header">
           <div>
             <h1>Dashboard</h1>
             <p>Welcome back to Central Pharmacy</p>
+          </div>
+          
+          {/* ✅ Period Filter */}
+          <div className="phd-period-filter">
+            <button
+              className={`phd-period-btn ${selectedPeriod === 'today' ? 'phd-period-btn--active' : ''}`}
+              onClick={() => setSelectedPeriod('today')}
+            >
+              Today
+            </button>
+            <button
+              className={`phd-period-btn ${selectedPeriod === 'month' ? 'phd-period-btn--active' : ''}`}
+              onClick={() => setSelectedPeriod('month')}
+            >
+              This Month
+            </button>
+            <button
+              className={`phd-period-btn ${selectedPeriod === 'year' ? 'phd-period-btn--active' : ''}`}
+              onClick={() => setSelectedPeriod('year')}
+            >
+              This Year
+            </button>
           </div>
         </div>
 
@@ -176,10 +166,15 @@ const PharmacyOverview = () => {
                 <div className={`phd-stat-icon phd-stat-icon--${stat.color}`}>
                   {stat.icon}
                 </div>
-                <div className={`phd-stat-change ${stat.trend === 'up' ? 'phd-stat-change--up' : 'phd-stat-change--down'}`}>
-                  {stat.trend === 'up' ? <MdTrendingUp /> : <MdTrendingDown />}
-                  <span>{stat.change}</span>
-                </div>
+                {stat.trend !== 'neutral' && (
+                  <div className={`phd-stat-change ${stat.trend === 'up' ? 'phd-stat-change--up' : 'phd-stat-change--down'}`}>
+                    {stat.trend === 'up' ? <MdTrendingUp /> : <MdTrendingDown />}
+                    <span>{stat.change}</span>
+                  </div>
+                )}
+                {stat.trend === 'neutral' && (
+                  <div className="phd-stat-info">{stat.change}</div>
+                )}
               </div>
             </div>
           ))}
@@ -195,7 +190,7 @@ const PharmacyOverview = () => {
                 <span className="phd-card-icon">
                   <FaPrescriptionBottle />
                 </span>
-                <span>Recent Prescriptions</span>
+                <span>Recent Prescriptions (Last 10)</span>
               </div>
               <button 
                 className="phd-btn-view-all" 
@@ -205,7 +200,7 @@ const PharmacyOverview = () => {
               </button>
             </div>
             <div className="phd-card-body">
-              {recentPrescriptions.length > 0 ? (
+              {data.recent_prescriptions.length > 0 ? (
                 <div className="phd-table-wrapper">
                   <table className="phd-table">
                     <thead>
@@ -219,7 +214,7 @@ const PharmacyOverview = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {recentPrescriptions.map((presc) => (
+                      {data.recent_prescriptions.map((presc) => (
                         <tr key={presc.id}>
                           <td>
                             <code className="phd-code">{presc.id}</code>
@@ -242,13 +237,13 @@ const PharmacyOverview = () => {
                           </td>
                           <td>
                             <span className={`phd-badge ${getStatusBadgeClass(presc.status)}`}>
-                              {presc.status === 'Pending' ? <MdPending /> : <MdCheckCircle />}
+                              {presc.status === 'Active' ? <MdPending /> : <MdCheckCircle />}
                               {presc.status}
                             </span>
                           </td>
                           <td>
                             <button className="phd-btn-action phd-btn-action--primary">
-                              {presc.status === 'Pending' ? 'Assign' : 'View'}
+                              View
                             </button>
                           </td>
                         </tr>
@@ -272,13 +267,13 @@ const PharmacyOverview = () => {
                 <span className="phd-card-icon phd-card-icon--notif">
                   <MdNotifications />
                 </span>
-                <span>Notifications</span>
+                <span>Notifications (Last 1 Hour)</span>
               </div>
             </div>
             <div className="phd-card-body">
-              {notifications.length > 0 ? (
+              {data.notifications.length > 0 ? (
                 <div className="phd-notif-list">
-                  {notifications.map((notif) => (
+                  {data.notifications.map((notif) => (
                     <div key={notif.id} className={`phd-notif-item ${getNotificationClass(notif.type)}`}>
                       <div className="phd-notif-icon">
                         {getNotificationIcon(notif.type)}
@@ -297,7 +292,7 @@ const PharmacyOverview = () => {
               ) : (
                 <div className="phd-empty-state">
                   <MdNotifications className="phd-empty-icon" />
-                  <p>No notifications</p>
+                  <p>No notifications in the last hour</p>
                 </div>
               )}
             </div>
@@ -306,73 +301,44 @@ const PharmacyOverview = () => {
         </div>
 
         {/* Low Stock Alert */}
-        <div className="phd-card">
-          <div className="phd-card-header">
-            <div className="phd-card-title">
-              <span className="phd-card-icon phd-card-icon--warning">
-                <MdWarning />
-              </span>
-              <span>Low Stock Alert</span>
+        {data.low_stock_medicines.length > 0 && (
+          <div className="phd-card">
+            <div className="phd-card-header">
+              <div className="phd-card-title">
+                <span className="phd-card-icon phd-card-icon--warning">
+                  <MdWarning />
+                </span>
+                <span>Low Stock Alert (Top 3 Critical)</span>
+              </div>
+              <button 
+                className="phd-btn-view-all" 
+                onClick={() => navigate('/pharmacy/stock')}
+              >
+                Manage Stock <MdArrowForward />
+              </button>
             </div>
-            <button 
-              className="phd-btn-view-all" 
-              onClick={() => navigate('/pharmacy/stock')}
-            >
-              Manage Stock <MdArrowForward />
-            </button>
-          </div>
-          <div className="phd-card-body">
-            <div className="phd-stock-list">
-              {lowStockMedicines.map((med, index) => (
-                <div key={index} className={`phd-stock-item ${getStockLevelClass(med.level)}`}>
-                  <div className="phd-stock-icon">
-                    <FaFlask />
-                  </div>
-                  <div className="phd-stock-info">
-                    <div className="phd-stock-name">{med.name}</div>
-                    <div className="phd-stock-unit">
-                      Only <strong>{med.stock} {med.unit}</strong> left
+            <div className="phd-card-body">
+              <div className="phd-stock-list">
+                {data.low_stock_medicines.map((med, index) => (
+                  <div key={index} className={`phd-stock-item ${getStockLevelClass(med.level)}`}>
+                    <div className="phd-stock-icon">
+                      <FaFlask />
                     </div>
+                    <div className="phd-stock-info">
+                      <div className="phd-stock-name">{med.name}</div>
+                      <div className="phd-stock-unit">
+                        Only <strong>{med.stock} {med.unit}</strong> left
+                      </div>
+                    </div>
+                    <span className={`phd-badge ${med.level === 'critical' ? 'phd-badge--red' : 'phd-badge--orange'}`}>
+                      {med.level === 'critical' ? 'Critical' : 'Low'}
+                    </span>
                   </div>
-                  <span className={`phd-badge ${med.level === 'critical' ? 'phd-badge--red' : 'phd-badge--orange'}`}>
-                    {med.level === 'critical' ? 'Critical' : 'Low'}
-                  </span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-
-        {/* Quick Stats Row */}
-        <div className="phd-quick-stats">
-          <div className="phd-quick-stat">
-            <div className="phd-quick-stat-icon phd-quick-stat-icon--blue">
-              <MdDescription />
-            </div>
-            <div className="phd-quick-stat-info">
-              <span className="phd-quick-stat-value">127</span>
-              <span className="phd-quick-stat-label">Total Prescriptions</span>
-            </div>
-          </div>
-          <div className="phd-quick-stat">
-            <div className="phd-quick-stat-icon phd-quick-stat-icon--green">
-              <MdCheckCircle />
-            </div>
-            <div className="phd-quick-stat-info">
-              <span className="phd-quick-stat-value">98.5%</span>
-              <span className="phd-quick-stat-label">Fulfillment Rate</span>
-            </div>
-          </div>
-          <div className="phd-quick-stat">
-            <div className="phd-quick-stat-icon phd-quick-stat-icon--purple">
-              <MdAccessTime />
-            </div>
-            <div className="phd-quick-stat-info">
-              <span className="phd-quick-stat-value">15 min</span>
-              <span className="phd-quick-stat-label">Avg. Response Time</span>
-            </div>
-          </div>
-        </div>
+        )}
 
       </div>
     </div>

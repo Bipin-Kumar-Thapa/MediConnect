@@ -36,15 +36,22 @@ const LoginForm = () => {
       );
 
       const role = response.data.role;
+      const name = response.data.name || email;
 
+      // ✅ NEW: Save login state to localStorage
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('userRole', role);
+      localStorage.setItem('userName', name);
+
+      // Redirect based on role
       if (role === 'patient') {
-        navigate('/patient');
+        navigate('/patient/overview');
       } else if (role === 'doctor') {
-        navigate('/doctor');
+        navigate('/doctor/overview');
       } else if (role === 'staff') {
-        navigate('/staff');
+        navigate('/staff/overview');
       } else if (role === 'pharmacy') {
-        navigate('/pharmacy');
+        navigate('/pharmacy/overview');
       } else {
         setError('User role not recognized');
       }

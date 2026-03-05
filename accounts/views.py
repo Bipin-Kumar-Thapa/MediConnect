@@ -15,6 +15,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from patients.models import PatientProfile
 from doctors.models import DoctorProfile
 from staff.models import StaffProfile
+from pharmacy.models import PharmacyProfile
 
 @csrf_protect
 def login_view(request):

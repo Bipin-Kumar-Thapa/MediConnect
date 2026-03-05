@@ -1,9 +1,8 @@
 import "../styles/MediConnect.css";
 import { FaCalendarAlt, FaFileAlt, FaClipboardList, FaStoreAlt, FaClock, FaBell,FaShieldAlt, FaBolt, FaUsers, FaHeart, FaUserAlt, FaUserMd, FaPills, FaFlask, FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn } from "react-icons/fa";
 import { FaEnvelope, FaPhoneAlt, FaMapMarkerAlt } from "react-icons/fa";
-import { Link } from "react-router-dom";
-import React, { useState } from "react";
-
+import { Link, useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
 
 const services = [
   {
@@ -45,40 +44,66 @@ const services = [
 ];
 
 const steps = [
-    {
-      number: "1",
-      title: "Patient Books Appointment",
-      desc: "Patient selects doctor and books appointment through the platform",
-    },
-    {
-      number: "2",
-      title: "Doctor Consultation",
-      desc: "Doctor reviews medical history and provides consultation",
-    },
-    {
-      number: "3",
-      title: "Lab Tests & Reports",
-      desc: "If needed, lab tests are ordered and results uploaded digitally",
-    },
-    {
-      number: "4",
-      title: "Digital Prescription",
-      desc: "Doctor provides prescription directly on the platform",
-    },
-    {
-      number: "5",
-      title: "Pharmacy Fulfillment",
-      desc: "Pharmacy receives prescription and prepares medication",
-    },
-    {
-      number: "6",
-      title: "Medicine Delivery & Schedule",
-      desc: "Pharmacy delivers medicine with a personalized medication timetable",
-    },
-  ];
+  {
+    number: "1",
+    title: "Patient Books Appointment",
+    desc: "Patient selects doctor and books appointment through the platform",
+  },
+  {
+    number: "2",
+    title: "Doctor Consultation",
+    desc: "Doctor reviews medical history and provides consultation",
+  },
+  {
+    number: "3",
+    title: "Lab Tests & Reports",
+    desc: "If needed, lab tests are ordered and results uploaded digitally",
+  },
+  {
+    number: "4",
+    title: "Digital Prescription",
+    desc: "Doctor provides prescription directly on the platform",
+  },
+  {
+    number: "5",
+    title: "Pharmacy Fulfillment",
+    desc: "Pharmacy receives prescription and prepares medication",
+  },
+  {
+    number: "6",
+    title: "Medicine Delivery & Schedule",
+    desc: "Pharmacy delivers medicine with a personalized medication timetable",
+  },
+];
 
 export default function MediConnect() {
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+  
+  // ✅ Check login state
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userRole, setUserRole] = useState('');
+
+  useEffect(() => {
+    // Check if user is logged in
+    const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+    const role = localStorage.getItem('userRole') || '';
+    
+    setIsLoggedIn(loggedIn);
+    setUserRole(role);
+  }, []);
+
+  // ✅ Handle dashboard navigation
+  const handleDashboardClick = () => {
+    const roleRoutes = {
+      patient: '/patient/overview',
+      doctor: '/doctor/overview',
+      staff: '/staff/overview',
+      pharmacy: '/pharmacy/overview',
+    };
+
+    navigate(roleRoutes[userRole] || '/login');
+  };
 
   return (
     <div className="page-container">
@@ -99,10 +124,20 @@ export default function MediConnect() {
           <a href="#about">About</a>
         </nav>
 
+        {/* ✅ Conditional Rendering: Dashboard OR Login/Signup */}
         <div className="header-right">
-          <Link to="/login" className="login-link">Login</Link>
-
-          <Link to="/signup" className="signup-btn">Sign Up Free</Link>
+          {isLoggedIn ? (
+            // Show Dashboard button if logged in
+            <button className="dashboard-btn" onClick={handleDashboardClick}>
+              Go to Dashboard →
+            </button>
+          ) : (
+            // Show Login and Signup if not logged in
+            <>
+              <Link to="/login" className="login-link">Login</Link>
+              <Link to="/signup" className="signup-btn">Sign Up Free</Link>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Toggle */}
@@ -115,7 +150,7 @@ export default function MediConnect() {
         </button>
       </header>
 
-      {/*  MOBILE MENU */}
+      {/* MOBILE MENU */}
       {menuOpen && (
         <div className="mobile-menu">
           <a href="#services" onClick={() => setMenuOpen(false)}>Services</a>
@@ -123,10 +158,24 @@ export default function MediConnect() {
           <a href="#about" onClick={() => setMenuOpen(false)}>About</a>
 
           <div className="mobile-auth">
-            <Link to="/login" onClick={() => setMenuOpen(false)}>Login</Link>
-            <Link to="/signup" className="signup-btn" onClick={() => setMenuOpen(false)}>
-              Sign Up Free
-            </Link>
+            {isLoggedIn ? (
+              <button 
+                className="dashboard-btn" 
+                onClick={() => {
+                  setMenuOpen(false);
+                  handleDashboardClick();
+                }}
+              >
+                Go to Dashboard →
+              </button>
+            ) : (
+              <>
+                <Link to="/login" onClick={() => setMenuOpen(false)}>Login</Link>
+                <Link to="/signup" className="signup-btn" onClick={() => setMenuOpen(false)}>
+                  Sign Up Free
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -144,11 +193,18 @@ export default function MediConnect() {
             platform.
           </p>
 
-          <Link to="/login">
-            <button className="get-started-btn">
-              Get Started <span className="arrow">→</span>
+          {/* ✅ Hero CTA Button */}
+          {isLoggedIn ? (
+            <button className="get-started-btn" onClick={handleDashboardClick}>
+              Go to Dashboard <span className="arrow">→</span>
             </button>
-          </Link>
+          ) : (
+            <Link to="/login">
+              <button className="get-started-btn">
+                Get Started <span className="arrow">→</span>
+              </button>
+            </Link>
+          )}
 
           <ul className="hero-list">
             <li>No credit card required</li>
@@ -274,7 +330,7 @@ export default function MediConnect() {
         </div>
       </section>
         
-        {/* Platform Overview */}
+      {/* Platform Overview */}
       <section className="platform-overview" id="about">
         <div className="po-left">
 
