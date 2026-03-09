@@ -41,6 +41,7 @@ import PharmacyOverview from "./components/pharmacy/PharmacyOverview";
 import PharmacyPrescriptions from "./components/pharmacy/PharmacyPrescriptions";
 import PharmacyRequests from "./components/pharmacy/PharmacyRequests";
 import PharmacyStock from "./components/pharmacy/PharmacyStock";
+import PharmacyProfile from "./components/pharmacy/PharmacyProfile";
 
 function App() {
   return (
@@ -94,6 +95,7 @@ function App() {
           <Route path="prescriptions" element={<PharmacyPrescriptions />} />
           <Route path="requests" element={<PharmacyRequests />} />
           <Route path="stock" element={<PharmacyStock />} />
+          <Route path="profile" element={<PharmacyProfile />} />
         </Route>
 
       </Routes>

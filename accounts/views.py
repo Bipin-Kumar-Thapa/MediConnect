@@ -126,7 +126,6 @@ def signup_view(request):
         else:
             return JsonResponse({'message': 'Invalid role'}, status=400)
 
-        # signup code as used AFTER successful signup
         if signup_code_obj:
             signup_code_obj.is_used = True
             signup_code_obj.save()

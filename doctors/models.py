@@ -54,11 +54,10 @@ class DoctorProfile(models.Model):
     def generate_random_code(self, length=6):
         """Generate random alphanumeric code (uppercase letters + digits)"""
         chars = ''.join([c for c in (string.ascii_uppercase + string.digits) 
-                        if c not in 'O0I1'])  # Remove confusing characters
+                        if c not in 'O0I1'])  
         return ''.join(random.choice(chars) for _ in range(length))
 
     def save(self, *args, **kwargs):
-        # Convert empty strings to None for optional fields
         if self.license_number == '':
             self.license_number = None
         if self.phone_number == '':
@@ -74,7 +73,6 @@ class DoctorProfile(models.Model):
         if self.department == '':
             self.department = None
         
-        # Generate random doctor_id if not exists
         if self.doctor_id:
             return super().save(*args, **kwargs)
         
@@ -122,7 +120,7 @@ class Appointment(models.Model):
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
         ('missed', 'Missed'),
-        ('needs_rescheduling', 'Needs Rescheduling'),  # ← NEW STATUS
+        ('needs_rescheduling', 'Needs Rescheduling'),
     ]
     
     TYPE_CHOICES = [
@@ -324,12 +322,9 @@ class DoctorSchedule(models.Model):
         return f"{self.doctor.doctor_id} - {self.get_day_of_week_display()} {self.start_time}-{self.end_time}"
     
     def save(self, *args, **kwargs):
-        """
-        Detects when doctor marks day as off and notifies affected patients
-        """
         is_marking_off = False
         
-        # Check if this is an existing schedule being marked as off
+        # Existing schedule being marked as off or not
         if self.pk:
             try:
                 old_schedule = DoctorSchedule.objects.get(pk=self.pk)
@@ -340,15 +335,11 @@ class DoctorSchedule(models.Model):
         
         super().save(*args, **kwargs)
         
-        # If marking day as off, handle affected appointments
+        # handle affected appointments
         if is_marking_off:
             self.handle_affected_appointments()
     
     def handle_affected_appointments(self):
-        """
-        Find and notify about appointments affected by marking day as off
-        """
-        # Map day_of_week to weekday number
         day_map = {
             'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
             'friday': 4, 'saturday': 5, 'sunday': 6
@@ -358,11 +349,9 @@ class DoctorSchedule(models.Model):
         if target_weekday is None:
             return
         
-        # Find upcoming appointments on this day of week (next 30 days)
         today = timezone.now().date()
         next_30_days = today + timedelta(days=30)
         
-        # Get all dates in next 30 days that match this weekday
         affected_dates = []
         current_date = today
         while current_date <= next_30_days:
@@ -370,14 +359,12 @@ class DoctorSchedule(models.Model):
                 affected_dates.append(current_date)
             current_date += timedelta(days=1)
         
-        # Find appointments on these dates
         affected_appointments = Appointment.objects.filter(
             doctor=self.doctor,
             appointment_date__in=affected_dates,
             status__in=['pending', 'confirmed']
         ).select_related('patient__user')
         
-        # Update status and send emails
         for appointment in affected_appointments:
             appointment.status = 'needs_rescheduling'
             appointment.save()
@@ -386,9 +373,6 @@ class DoctorSchedule(models.Model):
             self.send_reschedule_email(appointment)
     
     def send_reschedule_email(self, appointment):
-        """
-        Send email to patient about affected appointment
-        """
         try:
             patient_email = appointment.patient.user.email
             if not patient_email:
@@ -399,7 +383,6 @@ class DoctorSchedule(models.Model):
             
             subject = '⚠️ Your Appointment Needs Rescheduling'
             
-            # Create reschedule link
             reschedule_url = f'http://localhost:3000'
             
             # Render email template
@@ -414,7 +397,7 @@ class DoctorSchedule(models.Model):
             
             send_mail(
                 subject,
-                '',  # Plain text version (empty for now)
+                '', 
                 'noreply@mediconnect.com',
                 [patient_email],
                 html_message=html_message,

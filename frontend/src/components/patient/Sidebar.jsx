@@ -33,7 +33,7 @@ const Sidebar = () => {
     { id: 'lab-reports', label: 'Lab Reports', icon: MdScience, path: '/patient/reports' },
     { id: 'medicine', label: 'Medicine Schedule', icon: MdMedication, path: '/patient/medicine' },
     { id: 'history', label: 'Consultation History', icon: MdBook, path: '/patient/history' },
-    { id: 'doctor', label: 'Meet Doctors', icon: MdPerson, path: '/patient/doctors' },
+    { id: 'doctor', label: 'Find by Symptom', icon: MdPerson, path: '/patient/doctors' },
   ];
 
   // Fetch user data on component mount

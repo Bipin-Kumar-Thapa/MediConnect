@@ -21,6 +21,13 @@ const PharmacySidebar = () => {
   // ✅ Fetch sidebar data
   useEffect(() => {
     fetchSidebarData();
+    
+    // ✅ Refresh badge counts every 30 seconds
+    const interval = setInterval(() => {
+      fetchSidebarData();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchSidebarData = async () => {
@@ -38,10 +45,30 @@ const PharmacySidebar = () => {
   };
 
   const menuItems = [
-    { path: '/pharmacy/overview', icon: <MdDashboard />, label: 'Overview' },
-    { path: '/pharmacy/prescriptions', icon: <MdDescription />, label: 'Prescriptions' },
-    { path: '/pharmacy/requests', icon: <MdNotifications />, label: 'Patient Requests' },
-    { path: '/pharmacy/stock', icon: <MdInventory />, label: 'Medicine Stock' }
+    { 
+      path: '/pharmacy/overview', 
+      icon: <MdDashboard />, 
+      label: 'Overview',
+      badge: null
+    },
+    { 
+      path: '/pharmacy/prescriptions', 
+      icon: <MdDescription />, 
+      label: 'Prescriptions',
+      badge: 'prescriptions' 
+    },
+    { 
+      path: '/pharmacy/requests', 
+      icon: <MdNotifications />, 
+      label: 'Patient Requests',
+      badge: 'requests'  
+    },
+    { 
+      path: '/pharmacy/stock', 
+      icon: <MdInventory />, 
+      label: 'Medicine Stock',
+      badge: null
+    }
   ];
 
   const isActive = (path) => location.pathname === path;
@@ -77,7 +104,6 @@ const PharmacySidebar = () => {
           }
         });
 
-        // ✅ Clear login state
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userRole');
         localStorage.removeItem('userName');
@@ -86,7 +112,6 @@ const PharmacySidebar = () => {
       } catch (error) {
         console.error('Logout error:', error);
         
-        // ✅ Clear login state even on error
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userRole');
         localStorage.removeItem('userName');
@@ -122,31 +147,40 @@ const PharmacySidebar = () => {
 
         {/* Logo */}
         <div className="phsb-logo">
-          <div className="phsb-logo-icon">
-            <MdLocalPharmacy />
+          <div className="logo-icon">
+            <img src="/images/Logo.png" alt="Logo" />
           </div>
           <div className="phsb-logo-text">
             <h2>MediConnect</h2>
-            <span>Pharmacy Portal</span>
+            <span>Pharmacy Dashboard</span>
           </div>
         </div>
 
         {/* Navigation */}
         <nav className="phsb-nav">
           <p className="phsb-nav-label">Menu</p>
-          {menuItems.map((item) => (
-            <button
-              key={item.path}
-              className={`phsb-nav-item ${isActive(item.path) ? 'phsb-nav-item--active' : ''}`}
-              onClick={() => handleNavigation(item.path)}
-            >
-              <span className="phsb-nav-icon">{item.icon}</span>
-              <span className="phsb-nav-text">{item.label}</span>
-            </button>
-          ))}
+          {menuItems.map((item) => {
+            const badgeCount = item.badge && sidebarData.badges 
+              ? sidebarData.badges[item.badge] 
+              : 0;
+            
+            return (
+              <button
+                key={item.path}
+                className={`phsb-nav-item ${isActive(item.path) ? 'phsb-nav-item--active' : ''}`}
+                onClick={() => handleNavigation(item.path)}
+              >
+                <span className="phsb-nav-icon">{item.icon}</span>
+                <span className="phsb-nav-text">{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="phsb-nav-badge">{badgeCount}</span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
-        {/* ✅ Profile Section (Clickable) */}
+        {/* Profile Section (Clickable) */}
         <div className="phsb-profile-section">
           <div 
             className="phsb-profile-card"

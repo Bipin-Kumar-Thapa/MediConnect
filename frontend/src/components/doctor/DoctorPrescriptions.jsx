@@ -31,6 +31,8 @@ const DoctorPrescriptions = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   const ITEMS_PER_PAGE = 10;
 
   const [formData, setFormData] = useState({
@@ -52,6 +54,16 @@ const DoctorPrescriptions = () => {
   useEffect(() => {
     fetchPrescriptions();
   }, [filterStatus, searchQuery, selectedDate]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.patient-search-container')) {
+        setShowPatientDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -151,6 +163,7 @@ const DoctorPrescriptions = () => {
         alert(`Prescription ${data.prescription_number} created successfully!`);
         setShowCreateModal(false);
         setFormData({ patient_id: '', diagnosis: '', notes: '', valid_until: '' });
+        setPatientSearchQuery('');
         setMedicines([{ name: '', dosage: '', frequency: '', duration: '', instructions: '' }]);
         fetchPrescriptions();
       } else {
@@ -193,6 +206,10 @@ const DoctorPrescriptions = () => {
     }
     return pages;
   };
+
+  const filteredPatients = patients.filter(p =>
+    p.display?.toLowerCase().includes(patientSearchQuery.toLowerCase())
+  );
 
   if (loading) {
     return <div className="doctor-prescriptions-page">Loading...</div>;
@@ -395,18 +412,71 @@ const DoctorPrescriptions = () => {
                 <div className="form-row">
                   <div className="form-group">
                     <label>Select Patient *</label>
-                    <select
-                      required
-                      value={formData.patient_id}
-                      onChange={(e) => handleFormChange('patient_id', e.target.value)}
-                    >
-                      <option value="">Choose a patient...</option>
-                      {patients.map(patient => (
-                        <option key={patient.id} value={patient.id}>
-                          {patient.display}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="patient-search-container">
+                      <div className="patient-search-box-input">
+                        <MdSearch size={18} />
+                        <input
+                          type="text"
+                          placeholder="Search patient by name or ID..."
+                          value={patientSearchQuery}
+                          onChange={(e) => setPatientSearchQuery(e.target.value)}
+                          onFocus={() => setShowPatientDropdown(true)}
+                          required={!formData.patient_id}
+                        />
+                        {formData.patient_id && (
+                          <button
+                            type="button"
+                            className="clear-selection-btn"
+                            onClick={() => {
+                              setFormData({ ...formData, patient_id: '' });
+                              setPatientSearchQuery('');
+                            }}
+                          >
+                            <MdClose size={16} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Selected patient display */}
+                      {formData.patient_id && !showPatientDropdown && (
+                        <div className="selected-patient-display">
+                          <span className="selected-check-icon">✓</span>
+                          <span>
+                            {patients.find(p => p.id === parseInt(formData.patient_id))?.display || 'Patient selected'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Dropdown results */}
+                      {showPatientDropdown && patientSearchQuery && (
+                        <div className="patient-search-results">
+                          {filteredPatients.length === 0 ? (
+                            <div className="no-patients-found">
+                              <p>No patients found matching "{patientSearchQuery}"</p>
+                            </div>
+                          ) : (
+                            filteredPatients.map(patient => (
+                              <div
+                                key={patient.id}
+                                className="patient-result-item"
+                                onClick={() => {
+                                  setFormData({ ...formData, patient_id: patient.id });
+                                  setPatientSearchQuery(patient.display);
+                                  setShowPatientDropdown(false);
+                                }}
+                              >
+                                <div className="patient-result-avatar">
+                                  {patient.display.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </div>
+                                <div className="patient-result-info">
+                                  <span className="patient-result-name">{patient.display}</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

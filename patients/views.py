@@ -6,26 +6,27 @@ from django.views.decorators.csrf import csrf_protect
 from django.db.models import Q
 from django.utils import timezone
 from .models import PatientProfile
-from doctors.models import DoctorProfile, Appointment, Prescription, DoctorSchedule
+from doctors.models import DoctorProfile, Appointment, Prescription, DoctorSchedule, ConsultationHistory
 import json
-from datetime import timedelta, datetime, time as dt_time
+from datetime import timedelta, datetime, time as dt_time, date
 from datetime import timedelta as dt_timedelta
 from staff.models import LabReport, LabReportParameter
-
+from django.http import HttpResponse
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image, PageBreak
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 import io
+from PyPDF2 import PdfMerger
+import os
+from django.conf import settings
+
 
 
 def auto_mark_missed_appointments():
-    """
-    Automatically mark appointments as missed if they are 3+ hours past the scheduled time
-    """
     from datetime import datetime
     
     now = timezone.now()
@@ -246,7 +247,7 @@ def patient_overview(request):
             'id': notif_id,
             'title': '🧪 Lab Results Ready',
             'message': f"Your {test_name} results are now available",
-            'priority': 'high' if lab.overall_status == 'critical' else 'medium',  # ✅ Changed
+            'priority': 'high' if lab.overall_status == 'critical' else 'medium',  
             'time': get_time_ago(lab.created_at)
         })
         notif_id += 1
@@ -581,7 +582,7 @@ def get_doctor_available_slots(request, doctor_id):
         except:
             return JsonResponse({"error": "Invalid date format"}, status=400)
 
-        # ✅ Check if doctor has schedule for this day
+        # Check if doctor has schedule for this day
         day_map = {
             0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday',
             4: 'friday', 5: 'saturday', 6: 'sunday'
@@ -595,7 +596,7 @@ def get_doctor_available_slots(request, doctor_id):
             slot_type='consultation'
         ).exists()
 
-        # ✅ If no schedule → return off_day = True
+        #  If no schedule → return off_day = True
         if not has_schedule:
             return JsonResponse({
                 'date': selected_date.isoformat(),
@@ -603,7 +604,7 @@ def get_doctor_available_slots(request, doctor_id):
                 'available_times': []
             })
 
-        # ✅ Has schedule → return available time slots in 12hr format
+        #  Has schedule → return available time slots in 12hr format
         available_times = get_available_time_slots(doctor, selected_date)
 
         return JsonResponse({
@@ -612,9 +613,6 @@ def get_doctor_available_slots(request, doctor_id):
             'available_times': available_times
         })
 
-    # ─────────────────────────────────────────────
-    # No date selected → return next 3 days from TOMORROW
-    # ─────────────────────────────────────────────
     day_map = {
         0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday',
         4: 'friday', 5: 'saturday', 6: 'sunday'
@@ -628,7 +626,6 @@ def get_doctor_available_slots(request, doctor_id):
 
     available_dates = []
 
-    # ✅ Start from TOMORROW (i=1), show 3 days
     for i in range(1, 4):
         check_date = today + timezone.timedelta(days=i)
         day_name = day_map[check_date.weekday()]
@@ -642,7 +639,6 @@ def get_doctor_available_slots(request, doctor_id):
                 'is_off': False
             })
         else:
-            # Doctor has no schedule → off day (still show but marked)
             available_dates.append({
                 'date': check_date.isoformat(),
                 'day': check_date.strftime('%A'),
@@ -658,11 +654,6 @@ def get_doctor_available_slots(request, doctor_id):
 
 
 def get_available_time_slots(doctor, check_date):
-    """
-    Helper function to get available 15-minute time slots for a specific date.
-    Returns times in 12-hour format (e.g. 1:00 PM, 4:30 AM)
-    No today booking allowed - always future dates only.
-    """
     from doctors.models import DoctorSchedule
     from datetime import datetime, timedelta as dt_timedelta
 
@@ -737,7 +728,6 @@ def cancel_appointment(request, appointment_id):
 
 
 def auto_expire_prescriptions(patient_profile):
-    """Auto expire prescriptions past valid_until date"""
     today = timezone.now().date()
     Prescription.objects.filter(
         patient=patient_profile,
@@ -753,8 +743,6 @@ def get_prescriptions(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
 
-    
-    # Auto-expire old prescriptions
     auto_expire_prescriptions(profile)
 
     status_filter = request.GET.get('status', 'all')
@@ -767,7 +755,6 @@ def get_prescriptions(request):
         patient=profile
     ).select_related('doctor__user').prefetch_related('medicines')
 
-    # Time Period Filter
     if time_period != 'all':
         today = timezone.now().date()
         
@@ -787,15 +774,13 @@ def get_prescriptions(request):
             start_date = today - timedelta(days=365)
             prescriptions = prescriptions.filter(prescribed_date__gte=start_date)
         
-        elif time_period.isdigit():  # Year filter (e.g., "2024", "2025")
+        elif time_period.isdigit():  
             year = int(time_period)
             prescriptions = prescriptions.filter(prescribed_date__year=year)
 
-    # Status filter
     if status_filter != 'all':
         prescriptions = prescriptions.filter(status=status_filter)
 
-    # Search filter
     if search_query:
         prescriptions = prescriptions.filter(
             Q(prescription_number__icontains=search_query) |
@@ -804,10 +789,8 @@ def get_prescriptions(request):
             Q(medicines__medicine_name__icontains=search_query)
         ).distinct()
 
-    # Order by date (newest first)
     prescriptions = prescriptions.order_by('-prescribed_date')
 
-    # ✅ Pagination
     total_count = prescriptions.count()
     total_pages = max(1, (total_count + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
@@ -816,7 +799,6 @@ def get_prescriptions(request):
     end_idx = start_idx + per_page
     paginated_prescriptions = prescriptions[start_idx:end_idx]
 
-    # Build prescriptions list
     prescriptions_list = []
     for prescription in paginated_prescriptions:
         medicines_data = []
@@ -842,7 +824,6 @@ def get_prescriptions(request):
             'notes': prescription.notes or ''
         })
 
-    # Stats (always from full dataset, not filtered)
     all_prescriptions = Prescription.objects.filter(patient=profile)
     stats = {
         'total':   all_prescriptions.count(),
@@ -850,7 +831,6 @@ def get_prescriptions(request):
         'expired': all_prescriptions.filter(status='expired').count(),
     }
 
-    # ✅ Get available years for filter dropdown
     years = all_prescriptions.dates('prescribed_date', 'year', order='DESC')
     available_years = [year.year for year in years]
 
@@ -865,7 +845,7 @@ def get_prescriptions(request):
             'has_next': page < total_pages,
             'has_prev': page > 1,
         },
-        'available_years': available_years,  # ✅ NEW
+        'available_years': available_years, 
     })
 
 
@@ -926,7 +906,6 @@ def download_prescription(request, prescription_id):
     story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#3B82F6')))
     story.append(Spacer(1, 5*mm))
 
-    # Prescription Number & Status
     rx_data = [
         [
             Paragraph(f"<b>Prescription No:</b> {prescription.prescription_number}", normal_style),
@@ -945,7 +924,6 @@ def download_prescription(request, prescription_id):
     story.append(rx_table)
     story.append(Spacer(1, 5*mm))
 
-    # Patient & Doctor Info
     patient_name = profile.user.get_full_name() or profile.user.username
     doctor_name = f"Dr. {prescription.doctor.user.get_full_name()}"
     specialty = prescription.doctor.get_specialty_display()
@@ -980,7 +958,6 @@ def download_prescription(request, prescription_id):
     story.append(info_table)
     story.append(Spacer(1, 5*mm))
 
-    # Diagnosis 
     if prescription.diagnosis:
         story.append(Paragraph("DIAGNOSIS", label_style))
         diag_data = [[Paragraph(prescription.diagnosis, normal_style)]]
@@ -995,7 +972,6 @@ def download_prescription(request, prescription_id):
         story.append(diag_table)
         story.append(Spacer(1, 5*mm))
 
-    # Medicines 
     story.append(Paragraph("PRESCRIBED MEDICINES", label_style))
     story.append(Spacer(1, 2*mm))
 
@@ -1031,7 +1007,6 @@ def download_prescription(request, prescription_id):
     story.append(med_table)
     story.append(Spacer(1, 5*mm))
 
-    # Instructions 
     has_instructions = any(
         med.instructions for med in prescription.medicines.all()
     )
@@ -1045,7 +1020,6 @@ def download_prescription(request, prescription_id):
                 ))
         story.append(Spacer(1, 4*mm))
 
-    # Notes
     if prescription.notes:
         story.append(Paragraph("ADDITIONAL NOTES", label_style))
         notes_data = [[Paragraph(prescription.notes, normal_style)]]
@@ -1069,11 +1043,9 @@ def download_prescription(request, prescription_id):
             fontSize=8, textColor=colors.HexColor('#9CA3AF'), alignment=TA_CENTER)
     ))
 
-    # Build PDF 
     doc.build(story)
     buffer.seek(0)
 
-    from django.http import HttpResponse
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = (
         f'attachment; filename="prescription_{prescription.prescription_number}.pdf"'
@@ -1099,22 +1071,16 @@ def get_lab_reports(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
-    from staff.models import LabReport
-    from django.db.models import Q
-    from datetime import timedelta
-    
     status_filter = request.GET.get('status', 'all')
     search_query = request.GET.get('search', '').strip()
     time_period = request.GET.get('time_period', 'last_month') 
     page = int(request.GET.get('page', 1))
     per_page = 10
     
-    # ✅ FIXED: Changed prefetch_related to use test_sections
     lab_reports = LabReport.objects.filter(patient=profile).select_related(
         'uploaded_by__user', 'doctor__user'
     ).prefetch_related('test_sections__parameters','attachments')
     
-    # Time Period Filter
     if time_period != 'all':
         today = timezone.now().date()
         
@@ -1134,11 +1100,10 @@ def get_lab_reports(request):
             start_date = today - timedelta(days=365)
             lab_reports = lab_reports.filter(test_date__gte=start_date)
         
-        elif time_period.isdigit():  # Year filter (e.g., "2024", "2025")
+        elif time_period.isdigit(): 
             year = int(time_period)
             lab_reports = lab_reports.filter(test_date__year=year)
     
-    # ✅ FIXED: Changed status to overall_status
     if status_filter == 'pending':
         lab_reports = lab_reports.filter(is_completed=False)
     elif status_filter in ['normal', 'abnormal', 'critical']:
@@ -1146,17 +1111,14 @@ def get_lab_reports(request):
     elif status_filter != 'all':
         lab_reports = lab_reports.filter(overall_status=status_filter)
     
-    # ✅ FIXED: Removed search by test_name and category (they don't exist anymore)
     if search_query:
         lab_reports = lab_reports.filter(
             Q(report_number__icontains=search_query) |
             Q(test_sections__test_name_choice__icontains=search_query)
         ).distinct()
     
-    # Order by test date (newest first)
     lab_reports = lab_reports.order_by('-test_date', '-created_at')
-    
-    # Pagination
+
     total_count = lab_reports.count()
     total_pages = max(1, (total_count + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
@@ -1165,14 +1127,12 @@ def get_lab_reports(request):
     end_idx = start_idx + per_page
     paginated_reports = lab_reports[start_idx:end_idx]
     
-    # Build reports list
     reports_list = []
     for report in paginated_reports:
         uploaded_by = "Lab Staff"
         if report.uploaded_by:
             uploaded_by = f"Lab Tech - {report.uploaded_by.user.get_full_name()}"
         
-        # ✅ NEW: Get test sections
         test_sections_data = []
         for section in report.test_sections.all():
             parameters = []
@@ -1193,7 +1153,6 @@ def get_lab_reports(request):
                 'parameters': parameters,
             })
         
-        # Get test names for display
         if test_sections_data:
             if len(test_sections_data) == 1:
                 test_name = test_sections_data[0]['test_name']
@@ -1206,17 +1165,15 @@ def get_lab_reports(request):
             test_name = "Lab Report"
             category = "General"
 
-        # ✅ NEW: Get attachments from LabReportAttachment model
         attachments_data = []
         for attachment in report.attachments.all():
             attachments_data.append({
                 'id': attachment.id,
-                'type': attachment.attachment_type,  # 'document' or 'image'
+                'type': attachment.attachment_type,  
                 'url': request.build_absolute_uri(attachment.file.url) if attachment.file else None,
                 'filename': attachment.file.name.split('/')[-1] if attachment.file else None,
             })
         
-        # Get uploaded files
         uploaded_files = []
         
         if report.report_file:
@@ -1233,7 +1190,6 @@ def get_lab_reports(request):
                 'url': request.build_absolute_uri(report.report_image.url)
             })
         
-        # Determine actual status to show
         if not report.is_completed:
             display_status = 'pending'
         else:
@@ -1251,12 +1207,11 @@ def get_lab_reports(request):
             'isCompleted': report.is_completed,
             'notes': report.notes or '',
             'hasFile': bool(report.report_file) or bool(report.report_image),
-            'test_sections': test_sections_data,  # ✅ NEW: Include test sections
+            'test_sections': test_sections_data,  
             'attachments': attachments_data,
             'uploadedFiles': uploaded_files,
         })
     
-    # ✅ FIXED: Stats use overall_status
     all_reports = LabReport.objects.filter(patient=profile)
     stats = {
         'total': all_reports.count(),
@@ -1266,7 +1221,6 @@ def get_lab_reports(request):
         'pending': all_reports.filter(is_completed=False).count(),
     }
     
-    # Get available years for filter dropdown
     years = all_reports.dates('test_date', 'year', order='DESC')
     available_years = [year.year for year in years]
     
@@ -1288,39 +1242,16 @@ def get_lab_reports(request):
 
 @login_required
 def download_lab_report(request, report_id):
-    """
-    Download complete lab report as PDF with:
-    - Report details
-    - Test sections with parameters
-    - Images (one per page with caption)
-    - Merged uploaded PDF (if exists)
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
     try:
-        from staff.models import LabReport
         report = LabReport.objects.get(id=report_id, patient=profile)
     except LabReport.DoesNotExist:
         return JsonResponse({"error": "Lab report not found"}, status=404)
     
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, 
-        HRFlowable, Image, PageBreak
-    )
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from PyPDF2 import PdfMerger
-    import io
-    import os
-    from django.conf import settings
-    
-    # Create PDF in memory
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -1334,9 +1265,7 @@ def download_lab_report(request, report_id):
     styles = getSampleStyleSheet()
     story = []
     
-    # ═══════════════════════════════════════════
     # Custom Styles
-    # ═══════════════════════════════════════════
     title_style = ParagraphStyle(
         'Title', parent=styles['Normal'],
         fontSize=24, fontName='Helvetica-Bold',
@@ -1360,9 +1289,8 @@ def download_lab_report(request, report_id):
         fontName='Helvetica-Bold'
     )
     
-    # ═══════════════════════════════════════════
-    # Page 1: Header & Report Details
-    # ═══════════════════════════════════════════
+    # Header & Report Details
+    
     story.append(Paragraph("LAB REPORT", title_style))
     story.append(Paragraph("MediConnect Hospital", 
         ParagraphStyle('Subtitle', parent=styles['Normal'],
@@ -1372,7 +1300,6 @@ def download_lab_report(request, report_id):
     story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor('#8B5CF6')))
     story.append(Spacer(1, 5*mm))
     
-    # ✅ FIXED: Changed report.status to report.overall_status
     status_color = {
         'normal': '#10B981',
         'abnormal': '#F59E0B',
@@ -1402,7 +1329,7 @@ def download_lab_report(request, report_id):
     # Patient & Test Info
     patient_name = profile.user.get_full_name() or profile.user.username
     
-    # ✅ NEW: Get test names from test_sections
+    # Get test names from test_sections
     test_sections = report.test_sections.all()
     if test_sections.exists():
         if test_sections.count() == 1:
@@ -1440,9 +1367,8 @@ def download_lab_report(request, report_id):
     story.append(details_table)
     story.append(Spacer(1, 5*mm))
     
-    # ═══════════════════════════════════════════
-    # ✅ NEW: Test Sections with Parameters
-    # ═══════════════════════════════════════════
+    
+    # Test Sections with Parameters
     if test_sections.exists():
         for section in test_sections:
             # Section header
@@ -1451,7 +1377,6 @@ def download_lab_report(request, report_id):
                 section_style
             ))
             
-            # Section status
             section_status_color = {
                 'Normal': '#10B981',
                 'Abnormal': '#F59E0B',
@@ -1464,7 +1389,6 @@ def download_lab_report(request, report_id):
             ))
             story.append(Spacer(1, 2*mm))
             
-            # Findings for this section
             if section.findings:
                 findings_data = [[Paragraph(f"<b>Findings:</b> {section.findings}", normal_style)]]
                 findings_table = Table(findings_data, colWidths=[170*mm])
@@ -1478,7 +1402,6 @@ def download_lab_report(request, report_id):
                 story.append(findings_table)
                 story.append(Spacer(1, 3*mm))
             
-            # Parameters table for this section
             parameters = section.parameters.all()
             if parameters.exists():
                 param_header = [
@@ -1519,9 +1442,7 @@ def download_lab_report(request, report_id):
                 story.append(param_table)
                 story.append(Spacer(1, 5*mm))
     
-    # ✅ REMOVED: Old findings section (now shown per test section)
-    
-    # Notes (overall report notes)
+
     if report.notes:
         story.append(Paragraph("NOTES & RECOMMENDATIONS", section_style))
         note_color = '#FEF2F2' if report.overall_status == 'critical' else '#FFFBEB'
@@ -1539,16 +1460,11 @@ def download_lab_report(request, report_id):
         story.append(notes_table)
         story.append(Spacer(1, 5*mm))
     
-    # ═══════════════════════════════════════════
-    # Images (One per page with caption)
-    # ═══════════════════════════════════════════
-    # Get all image attachments
+    
     image_attachments = report.attachments.filter(attachment_type='image')
     
-    # Also include old report_image if it exists (backwards compatibility)
     if report.report_image:
         image_attachments_list = list(image_attachments)
-        # Add old image if not already in attachments
         old_image_exists = False
         for att in image_attachments_list:
             if att.file and att.file.path == report.report_image.path:
@@ -1556,7 +1472,6 @@ def download_lab_report(request, report_id):
                 break
         
         if not old_image_exists:
-            # Create temporary object to represent old image
             class OldImageAttachment:
                 def __init__(self, file):
                     self.file = file
@@ -1566,10 +1481,9 @@ def download_lab_report(request, report_id):
     else:
         image_attachments_list = list(image_attachments)
     
-    # Add each image to PDF (one per page)
     for idx, attachment in enumerate(image_attachments_list, 1):
         if attachment.file:
-            story.append(PageBreak())  # New page for each image
+            story.append(PageBreak()) 
             story.append(Paragraph(f"ATTACHED IMAGE {idx}", section_style))
             story.append(Spacer(1, 3*mm))
             
@@ -1590,23 +1504,17 @@ def download_lab_report(request, report_id):
             except Exception as e:
                 story.append(Paragraph(f"<i>Error loading image {idx}: {str(e)}</i>", normal_style))
     
-    # Build the main PDF
     doc.build(story)
     
-    # ═══════════════════════════════════════════
-    # Merge uploaded PDF if exists
-    # ═══════════════════════════════════════════
-    # Get all document attachments
+ 
     document_attachments = report.attachments.filter(attachment_type='document')
     
-    # Also include old report_file if it exists (backwards compatibility)
     pdf_files_to_merge = []
     
     for attachment in document_attachments:
         if attachment.file and attachment.file.name.lower().endswith('.pdf'):
             pdf_files_to_merge.append(attachment.file.path)
     
-    # Add old report_file if exists and not already in list
     if report.report_file and report.report_file.name.lower().endswith('.pdf'):
         if report.report_file.path not in pdf_files_to_merge:
             pdf_files_to_merge.append(report.report_file.path)
@@ -1616,18 +1524,15 @@ def download_lab_report(request, report_id):
         try:
             merger = PdfMerger()
             
-            # Add our generated PDF first
             buffer.seek(0)
             merger.append(buffer)
             
-            # Add all uploaded PDFs
             for pdf_path in pdf_files_to_merge:
                 try:
                     merger.append(pdf_path)
                 except Exception as e:
                     print(f"Error merging PDF {pdf_path}: {e}")
             
-            # Write merged PDF to new buffer
             final_buffer = io.BytesIO()
             merger.write(final_buffer)
             merger.close()
@@ -1636,15 +1541,11 @@ def download_lab_report(request, report_id):
             buffer = final_buffer
         except Exception as e:
             print(f"Error merging PDFs: {e}")
-            # If merge fails, just use the generated PDF
             buffer.seek(0)
     else:
         buffer.seek(0)
-    # ═══════════════════════════════════════════
+
     # Return PDF
-    # ═══════════════════════════════════════════
-    from django.http import HttpResponse
-    
     patient_name_safe = patient_name.replace(' ', '_')
     filename = f"LabReport_{report.report_number}_{patient_name_safe}_{report.test_date.strftime('%Y%m%d')}.pdf"
     
@@ -1859,20 +1760,16 @@ def get_consultation_history(request):
     except PatientProfile.DoesNotExist:
         return JsonResponse({"error": "Patient profile not found"}, status=404)
     
-    from doctors.models import ConsultationHistory
-    from datetime import timedelta
-    
     search_query = request.GET.get('search', '').strip()
     filter_doctor = request.GET.get('doctor', 'all')
-    time_period = request.GET.get('time_period', 'last_month')  # ✅ NEW
-    page = int(request.GET.get('page', 1))  # ✅ NEW
-    per_page = 10  # ✅ NEW
+    time_period = request.GET.get('time_period', 'last_month') 
+    page = int(request.GET.get('page', 1))  
+    per_page = 10  
     
     consultations = ConsultationHistory.objects.filter(
         patient=profile
     ).select_related('doctor__user', 'appointment')
     
-    # ✅ NEW: Time Period Filter
     if time_period != 'all':
         today = timezone.now().date()
         
@@ -1892,11 +1789,10 @@ def get_consultation_history(request):
             start_date = today - timedelta(days=365)
             consultations = consultations.filter(consultation_date__gte=start_date)
         
-        elif time_period.isdigit():  # Year filter (e.g., "2024", "2025")
+        elif time_period.isdigit():  
             year = int(time_period)
             consultations = consultations.filter(consultation_date__year=year)
     
-    # Doctor filter
     if filter_doctor != 'all':
         name_parts = filter_doctor.replace('Dr. ', '').strip().split(' ')
         if len(name_parts) >= 2:
@@ -1910,7 +1806,6 @@ def get_consultation_history(request):
                 Q(doctor__user__last_name__icontains=name_parts[0])
             )
     
-    # Search query
     if search_query:
         consultations = consultations.filter(
             Q(doctor__user__first_name__icontains=search_query) |
@@ -1920,10 +1815,8 @@ def get_consultation_history(request):
             Q(consultation_number__icontains=search_query)
         )
     
-    # ✅ NEW: Order by date (newest first)
     consultations = consultations.order_by('-consultation_date', '-consultation_time')
     
-    # ✅ NEW: Pagination
     total_count = consultations.count()
     total_pages = max(1, (total_count + per_page - 1) // per_page)
     page = max(1, min(page, total_pages))
@@ -1932,9 +1825,8 @@ def get_consultation_history(request):
     end_idx = start_idx + per_page
     paginated_consultations = consultations[start_idx:end_idx]
     
-    # Build consultations list
     consultations_list = []
-    for consultation in paginated_consultations:  # ✅ Changed from consultations
+    for consultation in paginated_consultations:  
         vital_signs = {}
         if consultation.blood_pressure:
             vital_signs['bloodPressure'] = consultation.blood_pressure
@@ -1965,8 +1857,6 @@ def get_consultation_history(request):
             'followUpDate': consultation.follow_up_date.isoformat() if consultation.follow_up_date else None,
             'notes': consultation.notes or ''
         })
-    
-    # ✅ Stats (always from full dataset, not filtered)
     all_consultations = ConsultationHistory.objects.filter(patient=profile)
     
     current_year = timezone.now().year
@@ -1976,7 +1866,6 @@ def get_consultation_history(request):
     
     with_prescription = all_consultations.filter(prescription_issued=True).count()
     
-    # Unique doctors list for filter dropdown
     unique_doctors_list = []
     doctors = all_consultations.values(
         'doctor__user__first_name', 'doctor__user__last_name'
@@ -1987,7 +1876,6 @@ def get_consultation_history(request):
         if doctor_name not in unique_doctors_list:
             unique_doctors_list.append(doctor_name)
     
-    # Get available years for filter dropdown
     years = all_consultations.dates('consultation_date', 'year', order='DESC')
     available_years = [year.year for year in years]
     
@@ -2024,10 +1912,8 @@ def get_all_doctors(request):
             doctors = doctors.filter(specialization=specialty)
         
         if search:
-            # ✅ NEW: Smart keyword matching for symptoms
             search_lower = search.lower()
             
-            # Check for symptom keywords
             symptom_to_specialty = {
                 # Heart-related
                 'heart': 'cardiology',
@@ -2088,10 +1974,8 @@ def get_all_doctors(request):
                     break
             
             if matched_specialty:
-                # Filter by the detected specialty
                 doctors = doctors.filter(specialization=matched_specialty)
             else:
-                # Normal name/specialty search
                 doctors = doctors.filter(
                     Q(user__first_name__icontains=search) |
                     Q(user__last_name__icontains=search) |
@@ -2142,12 +2026,10 @@ def get_all_doctors(request):
                 'isVerified': doctor.is_verified,
             })
         
-        # ✅ NEW: Get all specialties with enhanced info
         all_specialties = DoctorProfile.objects.filter(
             is_active=True
         ).values_list('specialization', flat=True).distinct()
         
-        # ✅ NEW: Specialty info with descriptions and common conditions
         specialties_with_info = []
         specialty_details = {
             'cardiology': {
@@ -2270,7 +2152,7 @@ def get_all_doctors(request):
         
         return JsonResponse({
             'doctors': doctors_list,
-            'specialties': specialties_with_info  # ✅ Enhanced with descriptions
+            'specialties': specialties_with_info  
         })
         
     except Exception as e:
@@ -2278,16 +2160,8 @@ def get_all_doctors(request):
 
 
 
-# ═══════════════════════════════════════════════════════════════
-# FUNCTION 1: Get Reschedule Options (Same Doctor, Different Dates)
-# ═══════════════════════════════════════════════════════════════
-
 @login_required
 def get_reschedule_options(request, appointment_id):
-    """
-    Returns available dates/times for the SAME doctor (next 7 days only)
-    Excludes the off day that triggered the reschedule and any other off days
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
@@ -2303,13 +2177,9 @@ def get_reschedule_options(request, appointment_id):
         doctor = appointment.doctor
         doctor_name = f"Dr. {doctor.user.get_full_name()}"
         
-        from doctors.models import DoctorSchedule
-        from datetime import datetime, date, timedelta as dt_timedelta
-        
         now = timezone.now()
         today = now.date()
         
-        # Get doctor's ACTIVE working days (excludes off days)
         day_map = {
             0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday',
             4: 'friday', 5: 'saturday', 6: 'sunday'
@@ -2317,7 +2187,7 @@ def get_reschedule_options(request, appointment_id):
         
         schedules = DoctorSchedule.objects.filter(
             doctor=doctor,
-            is_active=True,  # ✅ Only active days (excludes off days)
+            is_active=True,  
             slot_type='consultation'
         )
         
@@ -2325,20 +2195,19 @@ def get_reschedule_options(request, appointment_id):
         for schedule in schedules:
             working_days.add(schedule.day_of_week)
         
-        # ✅ NEW: Get next 7 calendar days only (not 10 working days)
+        #  Get next 7 calendar days  
         available_dates = []
-        check_date = today + dt_timedelta(days=1)  # Start from tomorrow
-        end_date = today + dt_timedelta(days=7)    # End after 7 days
+        check_date = today + dt_timedelta(days=1)  
+        end_date = today + dt_timedelta(days=7)    
         
         while check_date <= end_date:
             day_name = day_map[check_date.weekday()]
             
-            # ✅ Check if this day is a working day (excludes off days automatically)
+            
             if day_name in working_days:
-                # Get available time slots for this date
                 available_times = get_available_time_slots(doctor, check_date)
                 
-                if available_times:  # Only include if slots available
+                if available_times: 
                     available_dates.append({
                         'date': check_date.isoformat(),
                         'day': check_date.strftime('%A'),
@@ -2364,17 +2233,10 @@ def get_reschedule_options(request, appointment_id):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-# ═══════════════════════════════════════════════════════════════
-# FUNCTION 2: Reschedule Appointment (Update Date/Time)
-# ═══════════════════════════════════════════════════════════════
-
 @login_required
 @csrf_protect
 @require_http_methods(["POST"])
 def reschedule_appointment(request, appointment_id):
-    """
-    Updates appointment with new date/time (same doctor)
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
@@ -2395,9 +2257,7 @@ def reschedule_appointment(request, appointment_id):
         if appointment.status != 'needs_rescheduling':
             return JsonResponse({"error": "This appointment doesn't need rescheduling"}, status=400)
         
-        # ✅ FIX: Convert time string to time object
         if isinstance(new_time, str):
-            # Parse time string (format: "HH:MM" or "HH:MM:SS")
             try:
                 time_obj = datetime.strptime(new_time, '%H:%M').time()
             except ValueError:
@@ -2408,14 +2268,11 @@ def reschedule_appointment(request, appointment_id):
         else:
             time_obj = new_time
         
-        # ✅ Convert date string to date object
         if isinstance(new_date, str):
             date_obj = datetime.strptime(new_date, '%Y-%m-%d').date()
         else:
             date_obj = new_date
         
-        # Check for conflicts (same doctor, same date/time)
-        from django.db.models import Q
         conflict = Appointment.objects.filter(
             doctor=appointment.doctor,
             appointment_date=date_obj,
@@ -2435,7 +2292,7 @@ def reschedule_appointment(request, appointment_id):
         appointment.reminder_sent = False
         appointment.save()
         
-        # ✅ FIX: Format time properly
+        #  Format time properly
         formatted_time = appointment.appointment_time.strftime('%I:%M %p')
         formatted_date = appointment.appointment_date.strftime('%B %d, %Y')
         
@@ -2455,16 +2312,9 @@ def reschedule_appointment(request, appointment_id):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-# ═══════════════════════════════════════════════════════════════
-# FUNCTION 3: Get Transfer Options (Same Specialty, Different Doctor)
-# ═══════════════════════════════════════════════════════════════
 
 @login_required
 def get_transfer_options(request, appointment_id):
-    """
-    Returns alternative doctors with same specialty
-    Checks their availability on same date/time if possible
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
@@ -2496,7 +2346,6 @@ def get_transfer_options(request, appointment_id):
                 4: 'friday', 5: 'saturday', 6: 'sunday'
             }
             
-            # ✅ NEW LOGIC: Check if doctor has ANY working days in next 7 days
             today = timezone.now().date()
             
             # Check if doctor has any active schedules at all
@@ -2507,15 +2356,13 @@ def get_transfer_options(request, appointment_id):
             ).exists()
             
             if not has_any_schedule:
-                continue  # Skip if doctor has no schedules at all
+                continue  
             
-            # Check if doctor has available slots in next 7 days
             found_available_day = False
-            for days_ahead in range(1, 8):  # Check next 7 days
+            for days_ahead in range(1, 8):  
                 check_date = today + dt_timedelta(days=days_ahead)
                 day_name = day_map[check_date.weekday()]
                 
-                # Check if doctor works on this day
                 has_schedule_this_day = DoctorSchedule.objects.filter(
                     doctor=doctor,
                     day_of_week=day_name,
@@ -2524,18 +2371,14 @@ def get_transfer_options(request, appointment_id):
                 ).exists()
                 
                 if has_schedule_this_day:
-                    # Check if there are available slots
                     available_times = get_available_time_slots(doctor, check_date)
                     if available_times:
                         found_available_day = True
-                        break  # Found at least one available day
+                        break  
             
             if not found_available_day:
-                continue  # Skip if no available slots in next 7 days
+                continue  
             
-            # ✅ Doctor has available days! Include them in the list.
-            
-            # Check if doctor works on the ORIGINAL date (for "same time available" badge)
             original_day_name = day_map[original_date.weekday()]
             has_schedule_original_day = DoctorSchedule.objects.filter(
                 doctor=doctor,
@@ -2547,12 +2390,10 @@ def get_transfer_options(request, appointment_id):
             same_time_available = False
             
             if has_schedule_original_day:
-                # Doctor works on original day, check if original time is available
                 available_times_original = get_available_time_slots(doctor, original_date)
                 original_time_str = original_time.strftime('%I:%M %p').lstrip('0')
                 same_time_available = original_time_str in available_times_original
             
-            # Note: We don't show preview times here anymore since they'll be fetched
             # when user clicks the doctor card (via get_transfer_doctor_slots endpoint)
             
             doctor_photo = None
@@ -2567,7 +2408,7 @@ def get_transfer_options(request, appointment_id):
                 'room_location': doctor.room_location or 'Not specified',
                 'photo': doctor_photo,
                 'same_time_available': same_time_available,
-                'available_times': []  # Will be fetched when doctor is clicked
+                'available_times': []  
             })
         
         return JsonResponse({
@@ -2586,21 +2427,10 @@ def get_transfer_options(request, appointment_id):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-# ═══════════════════════════════════════════════════════════════
-# FUNCTION 4: Transfer Appointment (Change Doctor)
-# ═══════════════════════════════════════════════════════════════
-
-# Updated transfer_appointment function for patients/views.py
-# Replace the existing transfer_appointment function with this updated version
-
 @login_required
 @csrf_protect
 @require_http_methods(["POST"])
 def transfer_appointment(request, appointment_id):
-    """
-    Transfers appointment to a different doctor (same specialty)
-    Can choose different date and time
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
@@ -2634,13 +2464,11 @@ def transfer_appointment(request, appointment_id):
         if new_doctor.specialization != appointment.doctor.specialization:
             return JsonResponse({"error": "Doctor must have the same specialty"}, status=400)
         
-        # Convert date string to date object
         if isinstance(new_date, str):
             new_date_obj = datetime.strptime(new_date, '%Y-%m-%d').date()
         else:
             new_date_obj = new_date
         
-        # Convert time string to time object
         if isinstance(new_time, str):
             try:
                 new_time_obj = datetime.strptime(new_time, '%I:%M %p').time()
@@ -2652,10 +2480,9 @@ def transfer_appointment(request, appointment_id):
         else:
             new_time_obj = new_time
         
-        # Check for conflicts
         conflict = Appointment.objects.filter(
             doctor=new_doctor,
-            appointment_date=new_date_obj,  # ✅ Use date object
+            appointment_date=new_date_obj,  
             appointment_time=new_time_obj,
             status__in=['pending', 'confirmed']
         ).exists()
@@ -2666,7 +2493,7 @@ def transfer_appointment(request, appointment_id):
         # Update appointment
         old_doctor_name = f"Dr. {appointment.doctor.user.get_full_name()}"
         appointment.doctor = new_doctor
-        appointment.appointment_date = new_date_obj  # ✅ Use date object
+        appointment.appointment_date = new_date_obj  
         appointment.appointment_time = new_time_obj
         appointment.status = 'confirmed'
         appointment.reminder_sent = False
@@ -2696,10 +2523,6 @@ def transfer_appointment(request, appointment_id):
 
 @login_required
 def get_transfer_doctor_slots(request, doctor_id):
-    """
-    Get available dates for a DIFFERENT doctor during transfer
-    Uses SAME LOGIC as get_reschedule_options (7 calendar days, skip off days)
-    """
     try:
         profile = request.user.patientprofile
     except PatientProfile.DoesNotExist:
@@ -2710,18 +2533,12 @@ def get_transfer_doctor_slots(request, doctor_id):
     except DoctorProfile.DoesNotExist:
         return JsonResponse({"error": "Doctor not found or not available"}, status=404)
     
-    from doctors.models import DoctorSchedule
-    from datetime import datetime, timedelta as dt_timedelta
     
     now = timezone.now()
     today = now.date()
     
-    # Get date parameter (for getting times for specific date)
     selected_date_str = request.GET.get('date')
     
-    # ─────────────────────────────────────────────
-    # If date is selected → return times for that date
-    # ─────────────────────────────────────────────
     if selected_date_str:
         try:
             selected_date = datetime.strptime(selected_date_str, '%Y-%m-%d').date()
@@ -2736,20 +2553,16 @@ def get_transfer_doctor_slots(request, doctor_id):
             'available_times': available_times
         })
     
-    # ─────────────────────────────────────────────
-    # Otherwise, return available dates
-    # ✅ SAME LOGIC AS get_reschedule_options() ✅
-    # ─────────────────────────────────────────────
     
     day_map = {
         0: 'monday', 1: 'tuesday', 2: 'wednesday', 3: 'thursday',
         4: 'friday', 5: 'saturday', 6: 'sunday'
     }
     
-    # Get doctor's ACTIVE working days (excludes off days)
+    # Get doctor's ACTIVE working days 
     schedules = DoctorSchedule.objects.filter(
         doctor=doctor,
-        is_active=True,  # ✅ Only active days (excludes off days)
+        is_active=True,
         slot_type='consultation'
     )
     
@@ -2757,25 +2570,25 @@ def get_transfer_doctor_slots(request, doctor_id):
     for schedule in schedules:
         working_days.add(schedule.day_of_week)
     
-    # ✅ Get next 7 calendar days only (same as reschedule)
+    # Get next 7 calendar days only
     available_dates = []
-    check_date = today + dt_timedelta(days=1)  # Start from tomorrow
-    end_date = today + dt_timedelta(days=7)    # End after 7 days
+    check_date = today + dt_timedelta(days=1)  
+    end_date = today + dt_timedelta(days=7)    
     
     while check_date <= end_date:
         day_name = day_map[check_date.weekday()]
         
-        # ✅ Check if this day is a working day (excludes off days automatically)
+        
         if day_name in working_days:
             # Get available time slots for this date
             available_times = get_available_time_slots(doctor, check_date)
             
-            if available_times:  # Only include if slots available
+            if available_times:  
                 available_dates.append({
                     'date': check_date.isoformat(),
                     'day': check_date.strftime('%A'),
                     'formatted': check_date.strftime('%b %d, %Y'),
-                    'times': available_times  # Include times in response
+                    'times': available_times
                 })
         
         check_date += dt_timedelta(days=1)

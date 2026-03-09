@@ -5,7 +5,6 @@ import {
   MdDescription, 
   MdScience, 
   MdMedication,
-  MdDownload,
   MdCheckCircle,
   MdPending,
   MdCancel,
@@ -15,7 +14,8 @@ import {
   MdLocalHospital,
   MdNotifications,
   MdPriorityHigh,
-  MdArrowForward
+  MdArrowForward,
+  MdVisibility
 } from 'react-icons/md';
 import '../../styles/patient/PatientOverview.css';
 
@@ -182,13 +182,10 @@ const Overview = () => {
         })}
       </div>
 
-      {/* Main Content Grid with Notifications */}
       <div className="content-grid-with-sidebar">
         
-        {/* Left Column - Appointments and Prescriptions */}
         <div className="main-content-column">
 
-          {/* Upcoming Appointments with View All button */}
           <div className="section-card">
             <div className="section-header-clean">
               <h3>
@@ -361,9 +358,8 @@ const Overview = () => {
                 <h4>{report.test_name}</h4>
                 <p className="report-date">{report.date}</p>
                 <button className="download-btn">
-                  <MdDownload size={18} /> Download
+                  <MdVisibility size={18} /> View
                 </button>
-                <div className="card-arrow"><MdArrowForward size={16} /></div>
               </div>
             ))
           )}

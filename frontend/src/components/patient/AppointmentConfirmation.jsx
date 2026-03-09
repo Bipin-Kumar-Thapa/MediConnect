@@ -62,8 +62,8 @@ const AppointmentConfirmation = ({ appointmentData, onClose }) => {
           {/* The Card that will be downloaded */}
           <div className="appointment-card-container" ref={cardRef}>
             <div className="card-header">
-              <div className="card-logo">
-                <div className="logo-circle">M</div>
+              <div className="logo-icon">
+                <img src="/images/Logo.png" alt="Logo" />
               </div>
               <div className="card-branding">
                 <h1>MediConnect</h1>

@@ -45,12 +45,10 @@ class Command(BaseCommand):
                 appointment_date = appointment.appointment_date.strftime('%B %d, %Y')
                 appointment_time = appointment.appointment_time.strftime('%I:%M %p')
                 
-                subject = '⏰ Urgent Reminder: Please Reschedule Your Appointment'
+                subject = ' Urgent Reminder: Please Reschedule Your Appointment'
                 
-                # Create reschedule link
-                reschedule_url = 'http://localhost:3000/patient/appointments'
+                reschedule_url = 'http://localhost:3000/'
                 
-                # ✅ Use your EXISTING template (appointment_reschedule_notification.html)
                 html_message = render_to_string('registration/appointment_reschedule_reminder.html', {
                     'patient_name': patient_name,
                     'doctor_name': f'Dr. {doctor_name}',
@@ -60,35 +58,33 @@ class Command(BaseCommand):
                     'appointment_id': appointment.id,
                 })
                 
-                # Send email with HTML
                 send_mail(
                     subject,
-                    '',  # Plain text version (empty - HTML will be used)
+                    '', 
                     settings.EMAIL_HOST_USER,
                     [patient_email],
-                    html_message=html_message,  # ✅ Beautiful HTML email!
+                    html_message=html_message,  
                     fail_silently=False,
                 )
                 
-                # Mark as sent
                 appointment.reminder_sent = True
                 appointment.save(update_fields=['reminder_sent'])
                 
                 sent_count += 1
                 self.stdout.write(
                     self.style.SUCCESS(
-                        f"✓ Sent 12-hour reminder to {patient_name} ({patient_email})"
+                        f" Sent 12-hour reminder to {patient_name} ({patient_email})"
                     )
                 )
                 
             except Exception as e:
                 self.stdout.write(
                     self.style.ERROR(
-                        f"✗ Failed to send email: {str(e)}"
+                        f" Failed to send email: {str(e)}"
                     )
                 )
         
         self.stdout.write("-" * 50)
         self.stdout.write(
-            self.style.SUCCESS(f"✓ Successfully sent {sent_count} reminder email(s)")
+            self.style.SUCCESS(f" Successfully sent {sent_count} reminder email(s)")
         )

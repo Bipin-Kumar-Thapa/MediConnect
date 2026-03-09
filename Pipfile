@@ -15,6 +15,7 @@ reportlab = "*"
 pypdf2 = "==3.0.1"
 python-dotenv = "*"
 psycopg2-binary = "*"
+pytz = "*"
 
 [dev-packages]
 

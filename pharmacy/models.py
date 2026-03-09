@@ -11,7 +11,7 @@ class PharmacyProfile(models.Model):
     pharmacy_id = models.CharField(max_length=20, unique=True, editable=False, null=True, blank=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     license_number = models.CharField(max_length=50, blank=True, null=True)
-    specialization = models.CharField(max_length=100, blank=True, null=True)  # e.g., "Clinical Pharmacist"
+    specialization = models.CharField(max_length=100, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True, default='Pharmacy')
     shift = models.CharField(max_length=100, blank=True, null=True)
     years_of_experience = models.IntegerField(blank=True, null=True, default=0)
@@ -80,6 +80,7 @@ class Medicine(models.Model):
     ]
 
     name = models.CharField(max_length=200)
+    dosage = models.CharField(max_length=100, blank=True, null=True)
     generic_name = models.CharField(max_length=200, blank=True, null=True)
     manufacturer = models.CharField(max_length=200, blank=True, null=True)
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES, default='other')
@@ -165,3 +166,77 @@ class MedicineSchedule(models.Model):
         if self.total_quantity == 0:
             return 0
         return int((self.remaining_quantity / self.total_quantity) * 100)
+
+
+class PharmacyFulfillment(models.Model):
+    """Track pharmacy fulfillment of prescriptions"""
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending Assignment'),
+        ('fulfilled', 'Fully Fulfilled'),
+        ('partial', 'Partially Fulfilled'),
+        ('on_hold', 'On Hold'),
+        ('cancelled', 'Cancelled by Patient'),
+    ]
+    
+    prescription = models.OneToOneField(
+        'doctors.Prescription',
+        on_delete=models.CASCADE,
+        related_name='pharmacy_fulfillment'
+    )
+    
+    pharmacy_profile = models.ForeignKey(
+        PharmacyProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fulfillments'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending'
+    )
+    
+    fulfilled_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.prescription.prescription_number} - {self.status}"
+
+
+class FulfilledMedicine(models.Model):
+    """Track individual medicines fulfilled from a prescription"""
+    
+    fulfillment = models.ForeignKey(
+        PharmacyFulfillment,
+        on_delete=models.CASCADE,
+        related_name='fulfilled_medicines'
+    )
+    
+    prescribed_medicine = models.ForeignKey(
+        'doctors.PrescribedMedicine',
+        on_delete=models.CASCADE
+    )
+    
+    stock_medicine = models.ForeignKey(
+        Medicine,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    
+    quantity_dispensed = models.IntegerField()
+    quantity_requested = models.IntegerField()
+    
+    dispensed_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.prescribed_medicine.medicine_name} - {self.quantity_dispensed}/{self.quantity_requested}"

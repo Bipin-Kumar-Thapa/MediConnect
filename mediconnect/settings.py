@@ -28,7 +28,6 @@ DEBUG = os.getenv("DEBUG") == "True"
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -129,13 +128,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Internationalization
+
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Asia/Kathmandu'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files 
 STATIC_URL = 'static/'
 
 # Media files
